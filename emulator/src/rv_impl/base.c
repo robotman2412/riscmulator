@@ -29,10 +29,11 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
 
     if (RV_INSN_OP_MAJ(insn) & 0b00010) {
         // Is OP-32 or OP-IMM-32; truncate inputs.
-        lhs_s = ((int64_t)lhs << 32) >> 32;
-        rhs_s = ((int64_t)lhs << 32) >> 32;
-        lhs   = (uint32_t)lhs;
-        rhs   = (uint32_t)rhs;
+        lhs_s    = ((int64_t)lhs << 32) >> 32;
+        rhs_s    = ((int64_t)lhs << 32) >> 32;
+        lhs      = (uint32_t)lhs;
+        rhs      = (uint32_t)rhs;
+        rhs_uimm = (uint32_t)rhs_uimm;
     }
 
     uint64_t res;

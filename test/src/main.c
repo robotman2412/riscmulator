@@ -84,6 +84,11 @@ static bool do_test(char const *name, testcase_t test) {
 }
 
 int main(int argc, char **argv) {
+    char const *env = getenv("DO_FORK");
+    if (env) {
+        do_fork = atoi(env);
+    }
+
     size_t total;
     size_t succ = 0;
     if (argc <= 1) {
@@ -114,7 +119,7 @@ int main(int argc, char **argv) {
     if (total == 0) {
         printf("No tests to run.\n");
     } else {
-        printf("%zu/%zu (%zu%%) tests passed\n", succ, total, total * 100 / succ);
+        printf("%zu/%zu (%zu%%) tests passed\n", succ, total, succ * 100 / total);
     }
 
     return succ < total;

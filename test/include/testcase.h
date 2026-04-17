@@ -38,14 +38,14 @@ void testcase_error_message(char const *fmt, ...);
     {                                                                                                                  \
         int     regno_ = (regno);                                                                                      \
         int64_t value_ = (value);                                                                                      \
-        if (cpu->regs[regno_] != (value)) {                                                                            \
+        if ((int64_t)cpu->xregs[regno_] != value_) {                                                                   \
             testcase_error_message(                                                                                    \
-                "Expected x%d = 0x%" PRIx64 " (%" PRId64 "), actual = 0x%" PRIx64 " (%" PRId64 ")",                    \
+                "Expected x%d = " #value "; 0x%" PRIx64 " (%" PRId64 "), actual = 0x%" PRIx64 " (%" PRId64 ")",        \
                 regno_,                                                                                                \
                 value_,                                                                                                \
                 value_,                                                                                                \
-                (int64_t)cpu->regs[regno_],                                                                            \
-                (int64_t)cpu->regs[regno_]                                                                             \
+                (int64_t)cpu->xregs[regno_],                                                                           \
+                (int64_t)cpu->xregs[regno_]                                                                            \
             );                                                                                                         \
             return false;                                                                                              \
         }                                                                                                              \
@@ -54,9 +54,9 @@ void testcase_error_message(char const *fmt, ...);
 #define TEST_PC(value)                                                                                                 \
     {                                                                                                                  \
         int64_t value_ = (value);                                                                                      \
-        if (cpu->pc != (value)) {                                                                                      \
+        if ((int64_t)cpu->pc != (value)) {                                                                             \
             testcase_error_message(                                                                                    \
-                "Expected pc = 0x%" PRIx64 " (%" PRId64 "), actual = 0x%" PRIx64 " (%" PRId64 ")",                     \
+                "Expected pc = " #value ";  0x%" PRIx64 " (%" PRId64 "), actual = 0x%" PRIx64 " (%" PRId64 ")",        \
                 value_,                                                                                                \
                 value_,                                                                                                \
                 (int64_t)cpu->pc,                                                                                      \

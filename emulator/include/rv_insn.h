@@ -40,7 +40,7 @@ enum rv_op_maj {
 #define RV_INSN_BITFIELD(insn, bitpos, bitmask) (((insn) >> (bitpos)) & (bitmask))
 
 // Major opcode.
-#define RV_INSN_OP_MAJ(insn) RV_INSN_BITFIELD(insn, 2, 0x3f)
+#define RV_INSN_OP_MAJ(insn) RV_INSN_BITFIELD(insn, 2, 0x1f)
 
 // First source register.
 #define RV_INSN_RS1(insn)    RV_INSN_BITFIELD(insn, 15, 0x1f)
