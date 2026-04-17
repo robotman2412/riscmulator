@@ -53,8 +53,8 @@ void testcase_error_message(char const *fmt, ...);
 
 #define TEST_PC(value)                                                                                                 \
     {                                                                                                                  \
-        int64_t value_ = (value);                                                                                      \
-        if ((int64_t)cpu->pc != (value)) {                                                                             \
+        int64_t value_ = (int64_t)(value);                                                                             \
+        if ((int64_t)cpu->pc != value_) {                                                                              \
             testcase_error_message(                                                                                    \
                 "Expected pc = " #value ";  0x%" PRIx64 " (%" PRId64 "), actual = 0x%" PRIx64 " (%" PRId64 ")",        \
                 value_,                                                                                                \

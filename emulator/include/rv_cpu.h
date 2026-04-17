@@ -25,8 +25,12 @@ struct rv_cpu {
     union rv_freg       fregs[32];
     // Control and status registers.
     struct rv_csr_state csr;
-    // Program counter.
+    // Base address of the next instruction.
     uint64_t            pc;
+    // Base address of the last loaded instruction.
+    uint64_t            epc;
+    // Current privilege level.
+    uint8_t             privilege;
 };
 
 // Execute one instruction word.

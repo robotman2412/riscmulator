@@ -27,7 +27,7 @@ enum rv_op_maj {
     RV_OP_MAJ_OP_FP     = 0b10100,
     RV_OP_MAJ_OP_V      = 0b10101,
     RV_OP_MAJ_CUSTOM2   = 0b10110,
-    RV_OP_MAJ_BRANCH    = 0b10000,
+    RV_OP_MAJ_BRANCH    = 0b11000,
     RV_OP_MAJ_JALR      = 0b11001,
     RV_OP_MAJ_RESERVED  = 0b11010,
     RV_OP_MAJ_JAL       = 0b11011,

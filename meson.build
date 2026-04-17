@@ -2,7 +2,7 @@
 project('riscmulator', 'c',
     default_options: [
         'c_std=c23',
-        'buildtype=debugoptimized',
+        'buildtype=debug',
     ],
 )
 

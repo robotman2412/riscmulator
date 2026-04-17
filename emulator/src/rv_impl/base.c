@@ -7,6 +7,9 @@
 #include "rv_cpu.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
+#include "rv_privileged.h"
+
+#include <stdlib.h>
 
 // Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major opcodes.
 void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
@@ -130,7 +133,7 @@ void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
 
     // No need to check for IALIGN because this emulator has the C extension always enabled.
     rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
-    cpu->pc = cpu->pc + imm;
+    cpu->pc = cpu->epc + imm;
 }
 
 // Execute an instruction under the JALR major opcode.
@@ -149,8 +152,82 @@ void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
 
     uint64_t res = (int32_t)(insn & 0xfffff000);
     if (!(RV_INSN_OP_MAJ(insn) & 0b01000)) {
-        res += cpu->pc; // auipc
+        res += cpu->epc; // auipc
     }
 
     rv_reg_write(cpu, RV_INSN_RD(insn), res);
+}
+
+// Execute an instruction under the SYSTEM major opcode.
+void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    if (insn == 0x00000073) {
+        enum rv_cause cause;
+        switch (cpu->privilege) {
+            case 0: cause = RV_CAUSE_ECALL_U; break;
+            case 1: cause = RV_CAUSE_ECALL_S; break;
+            case 3: cause = RV_CAUSE_ECALL_M; break;
+            default: abort(); // Unreachable.
+        }
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .epc   = cpu->epc,
+                .cause = cause,
+                .tval  = 0,
+            }
+        );
+    } else if (0x00100073) {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .epc   = cpu->epc,
+                .cause = RV_CAUSE_EBREAK,
+                .tval  = 0,
+            }
+        );
+    } else {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .epc   = cpu->epc,
+                .cause = RV_CAUSE_IILLEGAL,
+                .tval  = insn,
+            }
+        );
+    }
+}
+
+// Execute an instruction under the BRANCH major opcode.
+void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    (void)machine;
+
+    // Like JAL, this IMM takes some more effort to extract.
+    int32_t imm_4_1  = (int32_t)(insn & 0x00000f00) >> 8 << 1;
+    int32_t imm_10_5 = (int32_t)(insn & 0x7e000000) >> 25 << 5;
+    int32_t imm_11   = (int32_t)(insn & 0x00000080) >> 7 << 11;
+    int32_t imm_12   = (int32_t)insn >> 31 << 12;
+    int32_t imm      = imm_4_1 | imm_10_5 | imm_11 | imm_12;
+
+    uint64_t lhs   = rv_reg_read(cpu, RV_INSN_RS1(insn));
+    uint64_t rhs   = rv_reg_read(cpu, RV_INSN_RS2(insn));
+    int64_t  lhs_s = lhs;
+    int64_t  rhs_s = rhs;
+
+    bool cond;
+    switch (RV_INSN_FUNCT3(insn)) {
+        case 0: cond = lhs == rhs; break;
+        case 1: cond = lhs != rhs; break;
+        case 4: cond = lhs_s < rhs_s; break;
+        case 5: cond = lhs_s >= rhs_s; break;
+        case 6: cond = lhs < rhs; break;
+        case 7: cond = lhs >= rhs; break;
+        default: rv_do_iillegal(machine, cpu, insn); return;
+    }
+
+    if (cond) {
+        cpu->pc = imm + (int64_t)cpu->epc;
+    }
 }

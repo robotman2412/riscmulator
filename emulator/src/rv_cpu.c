@@ -6,8 +6,8 @@
 
 #include "rv_impl/base.h"
 #include "rv_insn.h"
-
-#include <stdlib.h>
+#include "rv_machine.h"
+#include "rv_privileged.h"
 
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC for jumps and branches.
@@ -25,12 +25,31 @@ void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t 
         case RV_OP_MAJ_JALR: rv_base_jalr(machine, cpu, insn); break;
         case RV_OP_MAJ_LUI:
         case RV_OP_MAJ_AUIPC: rv_base_lui(machine, cpu, insn); break;
-        default: abort(); // TODO: Do illegal instruction.
+        case RV_OP_MAJ_SYSTEM: rv_base_system(machine, cpu, insn); break;
+        case RV_OP_MAJ_BRANCH: rv_base_branch(machine, cpu, insn); break;
+        default: rv_do_iillegal(machine, cpu, insn); break;
     }
 }
 
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
-    (void)machine;
-    (void)cpu;
+    // TODO: Support for 16-bit fetch.
+    uint32_t insn;
+    RV_READ_RAM(*machine, uint32_t, cpu->pc, insn, goto iaccess;);
+    cpu->epc  = cpu->pc;
+    cpu->pc  += 4;
+
+    rv_forcefeed_insn(machine, cpu, insn);
+
+    return;
+iaccess:
+    rv_do_trap(
+        machine,
+        cpu,
+        (struct rv_trap){
+            .epc   = cpu->epc,
+            .cause = RV_CAUSE_IACCESS,
+            .tval  = cpu->epc,
+        }
+    );
 }

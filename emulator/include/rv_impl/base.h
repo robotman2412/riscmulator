@@ -21,3 +21,7 @@ void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 void rv_base_jalr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 // Execute an instruction under the LUI or AUPIC major opcodes.
 void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
+// Execute an instruction under the SYSTEM major opcode.
+void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
+// Execute an instruction under the BRANCH major opcode.
+void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);

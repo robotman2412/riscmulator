@@ -1,8 +1,9 @@
 
 test_src = files(
-    'src/jal.c',
-    'src/op.c',
+    'src/branch.c',
     'src/main.c',
+    'src/op.c',
+    'src/trap.c',
 )
 
 test_include = [
