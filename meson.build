@@ -5,6 +5,8 @@ project('riscmulator', 'c',
         'buildtype=debugoptimized',
     ],
 )
+
+add_global_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
 add_global_arguments('-Werror=all', language: 'c')
 add_global_arguments('-Werror=implicit-fallthrough', language: 'c')
 add_global_arguments('-Werror=extra', language: 'c')

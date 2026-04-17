@@ -1,5 +1,6 @@
 
 test_src = files(
+    'src/jal.c',
     'src/main.c',
 )
 
