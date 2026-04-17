@@ -9,7 +9,10 @@
 #include "rv_machine.h"
 #include "rv_privileged.h"
 
+#include <stdatomic.h>
 #include <stdlib.h>
+
+#include <sched.h>
 
 // Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major opcodes.
 void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
@@ -229,5 +232,37 @@ void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 
     if (cond) {
         cpu->pc = imm + (int64_t)cpu->epc;
+    }
+}
+
+// Execute an instruction under the MISC-MEM major opcode.
+void rv_base_miscmem(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    (void)machine;
+    (void)cpu;
+
+    if (insn == 0x0100000f) {
+        // Pause hint; yield execution to the system.
+        sched_yield();
+        return;
+    }
+
+    uint32_t const r  = 1;
+    uint32_t const w  = 2;
+    uint32_t const rw = 3;
+
+    uint32_t pred = RV_INSN_BITFIELD(insn, 24, 0x3);
+    uint32_t succ = RV_INSN_BITFIELD(insn, 20, 0x3);
+    uint32_t fm   = RV_INSN_BITFIELD(insn, 28, 0xf);
+
+    if (pred == r && succ == rw) {
+        atomic_thread_fence(memory_order_acquire);
+    } else if (pred == rw && succ == w) {
+        atomic_thread_fence(memory_order_release);
+    } else if (pred == rw && succ == rw && fm == 8) {
+        // fence.tso
+        atomic_thread_fence(memory_order_acq_rel);
+    } else if (pred && succ) {
+        // Note: Also the fallback for other fence orderings.
+        atomic_thread_fence(memory_order_seq_cst);
     }
 }
