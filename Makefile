@@ -1,5 +1,5 @@
 
-makeflags: --silent
+makeflags += --silent
 
 TESTS ?=
 

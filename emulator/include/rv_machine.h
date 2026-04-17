@@ -6,12 +6,25 @@
 
 #include <stdint.h>
 
+struct rv_machine;
+struct rv_cpu;
+
+// Callback to run if the CPU performs an ECALL instruction (instead of the normal mechanism).
+// Note that it is up to the callee to increment the PC by 4 to continue execution, if desired.
+typedef void (*rv_ecall_fn_t)(struct rv_machine *machine, struct rv_cpu *cpu);
+
 // A whole emulated machine.
 struct rv_machine {
     // RAM bounds; anything outside is either a hole or MMIO.
-    uint64_t ram_start, ram_end;
+    uint64_t      ram_start, ram_end;
     // Virtual machine's RAM.
-    uint8_t *ram;
+    uint8_t      *ram;
+    // Intercept ECALL from U-mode if set.
+    rv_ecall_fn_t ecall_u;
+    // Intercept ECALL from S-mode if set.
+    rv_ecall_fn_t ecall_s;
+    // Intercept ECALL from M-mode if set.
+    rv_ecall_fn_t ecall_m;
 };
 
 // Macro that tries to read from RAM.
