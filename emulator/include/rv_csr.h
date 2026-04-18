@@ -28,6 +28,8 @@ struct rv_csr_state {
     uint64_t scause, stval, sepc;
     // Scratch registers.
     uint64_t sscratch, mscratch;
+    // Virtual memory control.
+    uint64_t satp;
 };
 
 #define RV_STATUS_SIE_BIT      1

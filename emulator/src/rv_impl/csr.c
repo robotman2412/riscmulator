@@ -28,6 +28,18 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_mtval: *rdata = cpu->csr.mtval; break;
         case RV_CSR_mepc: *rdata = cpu->csr.mepc; break;
         case RV_CSR_mtinst: *rdata = cpu->csr.mtinst; break;
+        case RV_CSR_mscratch: *rdata = cpu->csr.mscratch; break;
+
+        case RV_CSR_sstatus: *rdata = cpu->csr.mstatus & RV_SSTATUS_MASK; break;
+        case RV_CSR_sie: *rdata = cpu->csr.sie; break;
+        case RV_CSR_sip: *rdata = cpu->csr.sip; break;
+        case RV_CSR_stvec: *rdata = cpu->csr.stvec; break;
+        case RV_CSR_scause: *rdata = cpu->csr.scause; break;
+        case RV_CSR_stval: *rdata = cpu->csr.stval; break;
+        case RV_CSR_sepc: *rdata = cpu->csr.sepc; break;
+        case RV_CSR_sscratch: *rdata = cpu->csr.sscratch; break;
+        case RV_CSR_satp: *rdata = cpu->csr.satp; break;
+
         default: return false;
     }
 
@@ -60,6 +72,26 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
         case RV_CSR_mtval: cpu->csr.mtval = wdata; break;
         case RV_CSR_mepc: cpu->csr.mepc = wdata; break;
         case RV_CSR_mtinst: cpu->csr.mtinst = wdata; break;
+        case RV_CSR_mscratch: cpu->csr.mscratch = wdata; break;
+
+        case RV_CSR_sstatus:
+            // Mask out the things supervisor may write in the status register.
+            cpu->csr.mstatus &= ~RV_SSTATUS_MASK;
+            cpu->csr.mstatus |= wdata & RV_SSTATUS_MASK;
+            break;
+        case RV_CSR_sie: cpu->csr.sie = wdata; break;
+        case RV_CSR_sip: cpu->csr.sip = wdata; break;
+        case RV_CSR_stvec: cpu->csr.stvec = wdata; break;
+        case RV_CSR_scause: cpu->csr.scause = wdata; break;
+        case RV_CSR_stval: cpu->csr.stval = wdata; break;
+        case RV_CSR_sepc: cpu->csr.sepc = wdata; break;
+        case RV_CSR_sscratch: cpu->csr.sscratch = wdata; break;
+        case RV_CSR_satp:
+            // TODO: Notify other virtual-memory structures as needed (e.g.
+            // ASID, root PPN).
+            cpu->csr.satp = wdata;
+            break;
+
         default: return false;
     }
 
