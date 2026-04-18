@@ -33,8 +33,7 @@ static void setup_hooks(struct rv_machine *machine, bool *failed) {
 }
 
 // Single-CPU smoke test: addi x1,x0,5; addi x2,x0,3; add x3,x1,x2; ecall → x3=8
-TESTCASE(multicpu_single, {
-    (void)cpu;
+TESTCASE_NOMACHINE(multicpu_single, {
     static uint32_t const code[] = {
         0x00500093,  // addi x1, x0, 5
         0x00300113,  // addi x2, x0, 3
@@ -42,23 +41,23 @@ TESTCASE(multicpu_single, {
         0x00000073,  // ecall
     };
 
-    bool failed = false;
-    TEST_ASSERT(rv_machine_init(machine, 1, 0x10000, sizeof(code)));
-    memcpy(machine->ram, code, sizeof(code));
-    machine->cpus[0].privilege = 3;
-    machine->cpus[0].pc        = 0x10000;
-    setup_hooks(machine, &failed);
+    struct rv_machine machine = {0};
+    bool              failed  = false;
+    TEST_ASSERT(rv_machine_init(&machine, 1, 0x10000, sizeof(code)));
+    memcpy(machine.ram, code, sizeof(code));
+    machine.cpus[0].privilege = 3;
+    machine.cpus[0].pc        = 0x10000;
+    setup_hooks(&machine, &failed);
 
-    rv_machine_run(machine);
+    rv_machine_run(&machine);
 
     TEST_ASSERT(!failed);
-    TEST_ASSERT((int64_t)machine->cpus[0].xregs[3] == 8);
-    rv_machine_destroy(machine);
+    TEST_ASSERT((int64_t)machine.cpus[0].xregs[3] == 8);
+    rv_machine_destroy(&machine);
 })
 
 // Two-CPU independence test: CPU0 computes 10+20=30, CPU1 computes 100+200=300, both in x3.
-TESTCASE(multicpu_two_cpus, {
-    (void)cpu;
+TESTCASE_NOMACHINE(multicpu_two_cpus, {
     static uint32_t const code0[] = {
         0x00A00093,  // addi x1, x0, 10
         0x01400113,  // addi x2, x0, 20
@@ -72,47 +71,48 @@ TESTCASE(multicpu_two_cpus, {
         0x00000073,  // ecall
     };
 
-    size_t const ram_size = 0x200;
-    bool         failed   = false;
-    TEST_ASSERT(rv_machine_init(machine, 2, 0x10000, ram_size));
-    memcpy(machine->ram,        code0, sizeof(code0));
-    memcpy(machine->ram + 0x100, code1, sizeof(code1));
-    machine->cpus[0].privilege = 3;
-    machine->cpus[0].pc        = 0x10000;
-    machine->cpus[1].privilege = 3;
-    machine->cpus[1].pc        = 0x10100;
-    setup_hooks(machine, &failed);
+    size_t const      ram_size = 0x200;
+    struct rv_machine machine  = {0};
+    bool              failed   = false;
+    TEST_ASSERT(rv_machine_init(&machine, 2, 0x10000, ram_size));
+    memcpy(machine.ram,         code0, sizeof(code0));
+    memcpy(machine.ram + 0x100, code1, sizeof(code1));
+    machine.cpus[0].privilege = 3;
+    machine.cpus[0].pc        = 0x10000;
+    machine.cpus[1].privilege = 3;
+    machine.cpus[1].pc        = 0x10100;
+    setup_hooks(&machine, &failed);
 
-    rv_machine_run(machine);
+    rv_machine_run(&machine);
 
     TEST_ASSERT(!failed);
-    TEST_ASSERT((int64_t)machine->cpus[0].xregs[3] == 30);
-    TEST_ASSERT((int64_t)machine->cpus[1].xregs[3] == 300);
-    rv_machine_destroy(machine);
+    TEST_ASSERT((int64_t)machine.cpus[0].xregs[3] == 30);
+    TEST_ASSERT((int64_t)machine.cpus[1].xregs[3] == 300);
+    rv_machine_destroy(&machine);
 })
 
 // Hart-ID test: both CPUs run csrrs x1,mhartid,x0; ecall.
 // CPU0 → x1=0, CPU1 → x1=1.
-TESTCASE(multicpu_hartid, {
-    (void)cpu;
+TESTCASE_NOMACHINE(multicpu_hartid, {
     static uint32_t const code[] = {
         0xF14020F3,  // csrrs x1, mhartid, x0
         0x00000073,  // ecall
     };
 
-    bool failed = false;
-    TEST_ASSERT(rv_machine_init(machine, 2, 0x10000, sizeof(code)));
-    memcpy(machine->ram, code, sizeof(code));
-    machine->cpus[0].privilege = 3;
-    machine->cpus[0].pc        = 0x10000;
-    machine->cpus[1].privilege = 3;
-    machine->cpus[1].pc        = 0x10000;
-    setup_hooks(machine, &failed);
+    struct rv_machine machine = {0};
+    bool              failed  = false;
+    TEST_ASSERT(rv_machine_init(&machine, 2, 0x10000, sizeof(code)));
+    memcpy(machine.ram, code, sizeof(code));
+    machine.cpus[0].privilege = 3;
+    machine.cpus[0].pc        = 0x10000;
+    machine.cpus[1].privilege = 3;
+    machine.cpus[1].pc        = 0x10000;
+    setup_hooks(&machine, &failed);
 
-    rv_machine_run(machine);
+    rv_machine_run(&machine);
 
     TEST_ASSERT(!failed);
-    TEST_ASSERT((int64_t)machine->cpus[0].xregs[1] == 0);
-    TEST_ASSERT((int64_t)machine->cpus[1].xregs[1] == 1);
-    rv_machine_destroy(machine);
+    TEST_ASSERT((int64_t)machine.cpus[0].xregs[1] == 0);
+    TEST_ASSERT((int64_t)machine.cpus[1].xregs[1] == 1);
+    rv_machine_destroy(&machine);
 })

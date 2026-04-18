@@ -360,17 +360,20 @@ static bool do_riscv_test(
     FILE *f = fopen(pathbuf, "rb");
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
-
     fseek(f, 0, SEEK_SET);
-    uint8_t *buf = malloc(len);
-    len          = fread(buf, 1, len, f);
+
+    uint8_t *ram = realloc(machine->ram, len);
+    if (!ram) {
+        fclose(f);
+        return false;
+    }
+    machine->ram       = ram;
+    machine->ram_start = 0x10000;
+    machine->ram_end   = 0x10000 + len;
+    fread(machine->ram, 1, len, f);
+    fclose(f);
 
     struct riscv_test_state st = {0};
-
-    uint64_t const base_addr = 0x10000;
-    machine->ram_start       = base_addr;
-    machine->ram_end         = base_addr + len;
-    machine->ram             = buf;
 
     machine->hook_cookie = &st;
     for (int i = 0; i < 32; i++) {
@@ -378,15 +381,13 @@ static bool do_riscv_test(
     }
 
     cpu->privilege = 3;
-    cpu->pc        = base_addr;
+    cpu->pc        = 0x10000;
 
     while (!st.finished) {
         rv_step_insn(machine, cpu);
     }
 
-    free(machine->ram);
-    machine->ram_start = 0;
-    machine->ram_end   = 0;
+    machine->hook_cookie = nullptr;
 
     return !st.failure;
 }

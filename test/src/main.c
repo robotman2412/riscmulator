@@ -2,7 +2,6 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_machine.h"
 #include "testcase.h"
 
 #include <stdarg.h>
@@ -52,9 +51,7 @@ void testcase_error_message(char const *fmt, ...) {
 static bool do_test_impl(char const *name, testcase_t test) {
     printf("Test %s...", name);
     fflush(stdout);
-    struct rv_machine machine = {0};
-    struct rv_cpu     cpu     = {0};
-    bool              res     = test(&machine, &cpu);
+    bool res = test();
     if (res) {
         printf("\033[32m OK\033[0m\n");
     }
