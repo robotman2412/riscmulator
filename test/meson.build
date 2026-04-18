@@ -2,6 +2,7 @@
 test_src = files(
     'src/branch.c',
     'src/main.c',
+    'src/mem.c',
     'src/op.c',
     'src/riscv_tests.c',
     'src/trap.c',

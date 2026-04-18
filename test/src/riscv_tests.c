@@ -275,6 +275,7 @@ static bool compile_riscv_test(char const *set, char const *test) {
             "-nostartfiles",
             "-march=rv64i_zifencei_zicsr",
             "-mabi=lp64",
+            "-fno-pic",
             "-static",
             srcpath,
             "-o",

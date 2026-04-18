@@ -37,7 +37,8 @@ enum rv_op_maj {
 };
 
 // Read a bit-field.
-#define RV_INSN_BITFIELD(insn, bitpos, bitmask) (((insn) >> (bitpos)) & (bitmask))
+#define RV_INSN_BITFIELD(insn, bitpos, bitmask)                                \
+    (((insn) >> (bitpos)) & (bitmask))
 
 // Major opcode.
 #define RV_INSN_OP_MAJ(insn) RV_INSN_BITFIELD(insn, 2, 0x1f)
@@ -54,8 +55,9 @@ enum rv_op_maj {
 #define RV_INSN_FUNCT7(insn) RV_INSN_BITFIELD(insn, 25, 0x7f)
 
 // The 12-bit imm field (unsigned).
-#define RV_INSN_UIMM12(insn)  ((uint32_t)(insn) >> 20)
+#define RV_INSN_UIMM12(insn) ((uint32_t)(insn) >> 20)
 // The 12-bit imm field (signed).
-#define RV_INSN_IMM12(insn)   ((int32_t)(insn) >> 20)
+#define RV_INSN_IMM12(insn)  ((int32_t)(insn) >> 20)
 // The 12-bit imm field for S-type instructions (signed).
-#define RV_INSN_S_IMM12(insn) ((((int32_t)(insn) & 0xff000000) >> 20) | (((int32_t)(insn) & 0x380) >> 7))
+#define RV_INSN_S_IMM12(insn)                                                  \
+    (((int32_t)((insn) & 0xff000000) >> 20) | ((int32_t)((insn) & 0x380) >> 7))

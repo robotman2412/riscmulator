@@ -115,8 +115,15 @@ void rv_base_load(
 
     return;
 laccess:
-    (void)0;
-    // TODO: Set load access fault.
+    rv_do_trap(
+        machine,
+        cpu,
+        (struct rv_trap){
+            .cause = RV_CAUSE_LACCESS,
+            .epc   = cpu->epc,
+            .tval  = addr,
+        }
+    );
 }
 
 // Execute an instruction under the STORE or STORE-FP major opcodes.
@@ -126,20 +133,16 @@ void rv_base_store(
     uint64_t addr = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
     uint64_t wdata = rv_reg_read(cpu, RV_INSN_RS2(insn));
 
-    switch (RV_INSN_FUNCT3(insn)) {
-        case 4:
+    switch (RV_INSN_FUNCT3(insn) & 3) {
         case 0:
             RV_WRITE_RAM(*machine, uint8_t, addr, wdata, goto saccess;);
             break;
-        case 5:
         case 1:
             RV_WRITE_RAM(*machine, uint16_t, addr, wdata, goto saccess;);
             break;
-        case 6:
         case 2:
             RV_WRITE_RAM(*machine, uint32_t, addr, wdata, goto saccess;);
             break;
-        case 7:
         case 3:
             RV_WRITE_RAM(*machine, uint64_t, addr, wdata, goto saccess;);
             break;
@@ -148,8 +151,15 @@ void rv_base_store(
 
     return;
 saccess:
-    (void)0;
-    // TODO: Set store access fault.
+    rv_do_trap(
+        machine,
+        cpu,
+        (struct rv_trap){
+            .cause = RV_CAUSE_SACCESS,
+            .epc   = cpu->epc,
+            .tval  = addr,
+        }
+    );
 }
 
 // Execute an instruction under the JAL major opcode.
@@ -333,6 +343,12 @@ void rv_base_miscmem(
 ) {
     (void)machine;
     (void)cpu;
+
+    if (RV_INSN_FUNCT3(insn) == 1) {
+        // Instruction-fetch fence.
+        atomic_thread_fence(memory_order_acquire);
+        return;
+    }
 
     if (insn == 0x0100000f) {
         // Pause hint; yield execution to the system.
