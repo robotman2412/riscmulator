@@ -85,7 +85,6 @@ RISCV_TEST1(rv64ui, subw)
 RISCV_TEST1(rv64ui, xor)
 RISCV_TEST1(rv64ui, xori)
 
-/*
 RISCV_TEST1(rv64um, div)
 RISCV_TEST1(rv64um, divu)
 RISCV_TEST1(rv64um, divuw)
@@ -99,7 +98,6 @@ RISCV_TEST1(rv64um, rem)
 RISCV_TEST1(rv64um, remu)
 RISCV_TEST1(rv64um, remuw)
 RISCV_TEST1(rv64um, remw)
-*/
 
 /*
 RISCV_TEST1(rv64uf, fadd)
@@ -273,7 +271,7 @@ static bool compile_riscv_test(char const *set, char const *test) {
             "-Tplain.ld",
             "-nodefaultlibs",
             "-nostartfiles",
-            "-march=rv64i_zifencei_zicsr",
+            "-march=rv64im_zifencei_zicsr",
             "-mabi=lp64",
             "-fno-pic",
             "-static",

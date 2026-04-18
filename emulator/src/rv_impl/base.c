@@ -7,6 +7,7 @@
 #include "rv_cpu.h"
 #include "rv_csr.h"
 #include "rv_impl/csr.h"
+#include "rv_impl/muldiv.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
 #include "rv_privileged.h"
@@ -19,7 +20,10 @@
 // Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major
 // opcodes.
 void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
-    (void)machine;
+    if ((RV_INSN_OP_MAJ(insn) & 0b01000) && RV_INSN_FUNCT7(insn) == 0x01) {
+        rv_muldiv_op(machine, cpu, insn);
+        return;
+    }
 
     uint64_t lhs = rv_reg_read(cpu, RV_INSN_RS1(insn));
     uint64_t rhs, rhs_uimm;
