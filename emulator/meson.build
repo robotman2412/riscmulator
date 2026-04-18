@@ -17,4 +17,5 @@ emulator_include = [
 emulator_lib = library('riscmulator',
     emulator_src,
     include_directories: emulator_include,
+    dependencies: dependency('threads'),
 )

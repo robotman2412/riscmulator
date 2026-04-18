@@ -6,6 +6,9 @@
 
 #include "rv_privileged.h"
 
+#include <pthread.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 struct rv_machine;
@@ -14,6 +17,12 @@ struct rv_cpu;
 // Callback to run instead of the normal trap mechanism.
 // If this returns true, the normal trap mechanism activates.
 typedef bool (*rv_trap_fn_t)(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
+
+// Per-hart LR reservation entry; one per CPU indexed by mhartid.
+struct rv_reservation {
+    uint64_t addr;
+    bool     valid;
+};
 
 // A whole emulated machine.
 struct rv_machine {
@@ -25,7 +34,22 @@ struct rv_machine {
     rv_trap_fn_t trap_hook[32];
     // Cookie sent to all hook functions.
     void        *hook_cookie;
+    // CPU array; owned by this machine when allocated via rv_machine_init.
+    struct rv_cpu  *cpus;
+    size_t          cpu_count;
+    // Serialises all LR/SC/AMO operations across CPUs (Stage 4+).
+    pthread_mutex_t atomic_lock;
+    // One LR reservation per hart, indexed by mhartid; protected by atomic_lock.
+    struct rv_reservation *reservations;
 };
+
+// Initialise a machine: allocate cpu_count CPUs, RAM of ram_size bytes at ram_start,
+// and set up the atomic_lock and reservations array. Sets mhartid = i for each CPU.
+bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size);
+// Run all CPUs concurrently (one pthread each) until every cpu->halted is set.
+void rv_machine_run(struct rv_machine *machine);
+// Free all resources allocated by rv_machine_init.
+void rv_machine_destroy(struct rv_machine *machine);
 
 // Macro that tries to read from RAM.
 #define RV_READ_RAM(machine, data_type, addr_var, dest_var, fail_code)                                                 \
