@@ -1,6 +1,7 @@
 
 emulator_src = files(
     'src/rv_impl/base.c',
+    'src/rv_impl/csr.c',
     'src/rv_cpu.c',
     'src/rv_csr.c',
     'src/rv_machine.c',

@@ -5,6 +5,8 @@
 #include "rv_impl/base.h"
 
 #include "rv_cpu.h"
+#include "rv_csr.h"
+#include "rv_impl/csr.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
 #include "rv_privileged.h"
@@ -14,7 +16,8 @@
 
 #include <sched.h>
 
-// Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major opcodes.
+// Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major
+// opcodes.
 void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
@@ -76,19 +79,35 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
 }
 
 // Execute an instruction under the LOAD or LOAD-FP major opcodes.
-void rv_base_load(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_load(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     uint64_t addr = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
 
     uint64_t rdata;
     switch (RV_INSN_FUNCT3(insn)) {
-        case 0: RV_READ_RAM(*machine, int8_t, addr, rdata, goto laccess;); break;
-        case 1: RV_READ_RAM(*machine, int16_t, addr, rdata, goto laccess;); break;
-        case 2: RV_READ_RAM(*machine, int32_t, addr, rdata, goto laccess;); break;
-        case 4: RV_READ_RAM(*machine, uint8_t, addr, rdata, goto laccess;); break;
-        case 5: RV_READ_RAM(*machine, uint16_t, addr, rdata, goto laccess;); break;
-        case 6: RV_READ_RAM(*machine, uint32_t, addr, rdata, goto laccess;); break;
+        case 0:
+            RV_READ_RAM(*machine, int8_t, addr, rdata, goto laccess;);
+            break;
+        case 1:
+            RV_READ_RAM(*machine, int16_t, addr, rdata, goto laccess;);
+            break;
+        case 2:
+            RV_READ_RAM(*machine, int32_t, addr, rdata, goto laccess;);
+            break;
+        case 4:
+            RV_READ_RAM(*machine, uint8_t, addr, rdata, goto laccess;);
+            break;
+        case 5:
+            RV_READ_RAM(*machine, uint16_t, addr, rdata, goto laccess;);
+            break;
+        case 6:
+            RV_READ_RAM(*machine, uint32_t, addr, rdata, goto laccess;);
+            break;
         case 3:
-        case 7: RV_READ_RAM(*machine, uint64_t, addr, rdata, goto laccess;); break;
+        case 7:
+            RV_READ_RAM(*machine, uint64_t, addr, rdata, goto laccess;);
+            break;
         default: rdata = 0; // Unreachable.
     }
 
@@ -101,19 +120,29 @@ laccess:
 }
 
 // Execute an instruction under the STORE or STORE-FP major opcodes.
-void rv_base_store(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
-    uint64_t addr  = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
+void rv_base_store(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
+    uint64_t addr = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
     uint64_t wdata = rv_reg_read(cpu, RV_INSN_RS2(insn));
 
     switch (RV_INSN_FUNCT3(insn)) {
         case 4:
-        case 0: RV_WRITE_RAM(*machine, uint8_t, addr, wdata, goto saccess;); break;
+        case 0:
+            RV_WRITE_RAM(*machine, uint8_t, addr, wdata, goto saccess;);
+            break;
         case 5:
-        case 1: RV_WRITE_RAM(*machine, uint16_t, addr, wdata, goto saccess;); break;
+        case 1:
+            RV_WRITE_RAM(*machine, uint16_t, addr, wdata, goto saccess;);
+            break;
         case 6:
-        case 2: RV_WRITE_RAM(*machine, uint32_t, addr, wdata, goto saccess;); break;
+        case 2:
+            RV_WRITE_RAM(*machine, uint32_t, addr, wdata, goto saccess;);
+            break;
         case 7:
-        case 3: RV_WRITE_RAM(*machine, uint64_t, addr, wdata, goto saccess;); break;
+        case 3:
+            RV_WRITE_RAM(*machine, uint64_t, addr, wdata, goto saccess;);
+            break;
         default: // Unreachable.
     }
 
@@ -124,7 +153,9 @@ saccess:
 }
 
 // Execute an instruction under the JAL major opcode.
-void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_jal(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     (void)machine;
 
     // Unfortunately, this imm is harder to extract than usual.
@@ -134,23 +165,30 @@ void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
     int32_t imm_20    = (int32_t)insn >> 31 << 20;
     int32_t imm       = imm_19_12 | imm_11 | imm_10_1 | imm_20;
 
-    // No need to check for IALIGN because this emulator has the C extension always enabled.
+    // No need to check for IALIGN because this emulator has the C extension
+    // always enabled.
     rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
     cpu->pc = cpu->epc + imm;
 }
 
 // Execute an instruction under the JALR major opcode.
-void rv_base_jalr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_jalr(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     (void)machine;
 
-    // No need to check for IALIGN because this emulator has the C extension always enabled.
+    // No need to check for IALIGN because this emulator has the C extension
+    // always enabled.
     rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
-    cpu->pc  = (int64_t)rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
+    cpu->pc =
+        (int64_t)rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
     cpu->pc &= ~1;
 }
 
 // Execute an instruction under the LUI or AUPIC major opcodes.
-void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_lui(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     (void)machine;
 
     uint64_t res = (int32_t)(insn & 0xfffff000);
@@ -161,9 +199,60 @@ void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
     rv_reg_write(cpu, RV_INSN_RD(insn), res);
 }
 
+// Implementation of CSR operations.
+static void
+    do_csr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    uint32_t csr = RV_INSN_UIMM12(insn);
+    uint64_t wdata;
+    bool     do_write;
+    if (RV_INSN_FUNCT3(insn) & 4) {
+        wdata    = RV_INSN_RS1(insn);
+        do_write = true;
+    } else {
+        wdata    = rv_reg_read(cpu, RV_INSN_RS1(insn));
+        do_write = RV_INSN_RS1(insn) != 0;
+    }
+
+    uint64_t rdata = 0;
+    if (RV_INSN_RD(insn) != 0 || (RV_INSN_FUNCT3(insn) & 3) != 1) {
+        if (!rv_csr_read(cpu, csr, &rdata)) {
+            rv_do_iillegal(machine, cpu, insn);
+            return;
+        }
+    }
+
+    switch (RV_INSN_FUNCT3(insn) & 3) {
+        case 0: rv_do_iillegal(machine, cpu, insn); return;
+        case 1: /* Write verbatim. */ break;
+        case 2: wdata = rdata | wdata; break;
+        case 3: wdata = rdata & ~wdata; break;
+    }
+
+    if (do_write) {
+        if (!rv_csr_write(cpu, csr, wdata)) {
+            rv_do_iillegal(machine, cpu, insn);
+            return;
+        }
+    }
+
+    rv_reg_write(cpu, RV_INSN_RD(insn), rdata);
+}
+
 // Execute an instruction under the SYSTEM major opcode.
-void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
-    if (insn == 0x00000073) {
+void rv_base_system(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
+    if (RV_INSN_FUNCT3(insn) != 0) {
+        do_csr(machine, cpu, insn);
+    } else if (insn == 0x30200073 && cpu->privilege == 3) {
+        // mret
+        bool mpie         = (cpu->csr.mstatus >> RV_STATUS_MPIE_BIT) & 1;
+        cpu->csr.mstatus &= ~(1llu << RV_STATUS_MIE_BIT);
+        cpu->csr.mstatus |= mpie << RV_STATUS_MIE_BIT;
+        cpu->privilege    = (cpu->csr.mstatus >> RV_STATUS_MPP_BASE_BIT) & 3;
+        cpu->pc           = cpu->csr.mepc;
+    } else if (insn == 0x00000073) {
+        // ecall
         enum rv_cause cause;
         switch (cpu->privilege) {
             case 0: cause = RV_CAUSE_ECALL_U; break;
@@ -181,6 +270,7 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
             }
         );
     } else if (0x00100073) {
+        // ebreak
         rv_do_trap(
             machine,
             cpu,
@@ -204,7 +294,9 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 }
 
 // Execute an instruction under the BRANCH major opcode.
-void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_branch(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     (void)machine;
 
     // Like JAL, this IMM takes some more effort to extract.
@@ -236,7 +328,9 @@ void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 }
 
 // Execute an instruction under the MISC-MEM major opcode.
-void rv_base_miscmem(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_miscmem(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     (void)machine;
     (void)cpu;
 

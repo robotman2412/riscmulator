@@ -10,8 +10,11 @@
 #include "rv_privileged.h"
 
 // Execute one instruction word.
-// Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC for jumps and branches.
-void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+// Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
+// for jumps and branches.
+void rv_forcefeed_insn(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     switch (RV_INSN_OP_MAJ(insn)) {
         case RV_OP_MAJ_OP:
         case RV_OP_MAJ_OP_IMM:
@@ -27,6 +30,7 @@ void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t 
         case RV_OP_MAJ_AUIPC: rv_base_lui(machine, cpu, insn); break;
         case RV_OP_MAJ_SYSTEM: rv_base_system(machine, cpu, insn); break;
         case RV_OP_MAJ_BRANCH: rv_base_branch(machine, cpu, insn); break;
+        case RV_OP_MAJ_MISC_MEM: rv_base_miscmem(machine, cpu, insn); break;
         default: rv_do_iillegal(machine, cpu, insn); break;
     }
 }

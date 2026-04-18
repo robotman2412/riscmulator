@@ -14,6 +14,8 @@ enum rv_csr {
 
 // Control and status register state.
 struct rv_csr_state {
+    // Identifying information.
+    uint64_t mhartid, marchid, mimpid;
     // Note: `sstatus` uses a masked subset of this value.
     uint64_t mstatus;
     // Exception control: M-mode.
@@ -41,10 +43,19 @@ struct rv_csr_state {
 #define RV_STATUS_MPRV_BIT     17
 #define RV_STATUS_SUM_BIT      18
 #define RV_STATUS_MXR_BIT      19
-#define RV_STATUS_TVM_BIT      20
-#define RV_STATUS_TW_BIT       21
-#define RV_STATUS_TSR_BIT      22
-#define RV_STATUS_SR_BIT       31
+
+#define RV_MSTATUS_MASK                                                        \
+    RV_STATUS_SIE_BIT || RV_STATUS_MIE_BIT || RV_STATUS_SPIE_BIT ||            \
+        RV_STATUS_UBE_BIT || RV_STATUS_MPIE_BIT || RV_STATUS_SPP_BIT ||        \
+        3 * RV_STATUS_VS_BASE_BIT || 3 * RV_STATUS_MPP_BASE_BIT ||             \
+        3 * RV_STATUS_FS_BASE_BIT || 3 * RV_STATUS_XS_BASE_BIT ||              \
+        RV_STATUS_MPRV_BIT || RV_STATUS_SUM_BIT || RV_STATUS_MXR_BIT
+
+#define RV_SSTATUS_MASK                                                        \
+    RV_STATUS_SIE_BIT || RV_STATUS_SPIE_BIT || RV_STATUS_UBE_BIT ||            \
+        RV_STATUS_SPP_BIT || 3 * RV_STATUS_VS_BASE_BIT ||                      \
+        3 * RV_STATUS_MPP_BASE_BIT || 3 * RV_STATUS_FS_BASE_BIT ||             \
+        3 * RV_STATUS_XS_BASE_BIT || RV_STATUS_SUM_BIT || RV_STATUS_MXR_BIT
 
 // Get the name of a CSR; returns `nullptr` if invalid.
 [[gnu::const]] char const *rv_csr_to_name(enum rv_csr csr);
