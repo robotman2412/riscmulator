@@ -128,7 +128,7 @@ RISCV_TEST1(rv64ud, structural)
 RISCV_TEST1(rv64ud, recoding)
 */
 
-// RISCV_TEST1(rv64uc, rvc)
+RISCV_TEST1(rv64uc, rvc)
 
 /*
 RISCV_TEST1(rv64ua, amoadd_d)
@@ -271,7 +271,7 @@ static bool compile_riscv_test(char const *set, char const *test) {
             "-Tplain.ld",
             "-nodefaultlibs",
             "-nostartfiles",
-            "-march=rv64im_zifencei_zicsr",
+            "-march=rv64imc_zifencei_zicsr",
             "-mabi=lp64",
             "-fno-pic",
             "-static",

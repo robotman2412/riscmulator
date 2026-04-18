@@ -5,6 +5,7 @@ emulator_src = files(
     'src/rv_impl/muldiv.c',
     'src/rv_cpu.c',
     'src/rv_csr.c',
+    'src/rv_decompress.c',
     'src/rv_machine.c',
     'src/rv_privileged.c',
 )

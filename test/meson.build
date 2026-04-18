@@ -1,6 +1,7 @@
 
 test_src = files(
     'src/branch.c',
+    'src/decompress.c',
     'src/main.c',
     'src/mem.c',
     'src/op.c',

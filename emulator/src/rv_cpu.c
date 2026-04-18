@@ -4,6 +4,7 @@
 
 #include "rv_cpu.h"
 
+#include "rv_decompress.h"
 #include "rv_impl/base.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
@@ -37,15 +38,32 @@ void rv_forcefeed_insn(
 
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
-    // TODO: Support for 16-bit fetch.
+    uint16_t hw;
+    RV_READ_RAM(*machine, uint16_t, cpu->pc, hw, goto iaccess;);
+
     uint32_t insn;
-    RV_READ_RAM(*machine, uint32_t, cpu->pc, insn, goto iaccess;);
-    cpu->epc  = cpu->pc;
-    cpu->pc  += 4;
+    if ((hw & 0x3u) != 0x3u) {
+        // Compressed 16-bit instruction.
+        if (!rv_decompress(hw, &insn)) {
+            cpu->epc = cpu->pc;
+            rv_do_iillegal(machine, cpu, hw);
+            return;
+        }
+        cpu->epc  = cpu->pc;
+        cpu->pc  += 2;
+    } else {
+        // Full 32-bit instruction: fetch the upper halfword.
+        uint16_t hw2;
+        uint64_t pc2 = cpu->pc + 2;
+        RV_READ_RAM(*machine, uint16_t, pc2, hw2, goto iaccess;);
+        insn      = (uint32_t)hw | ((uint32_t)hw2 << 16);
+        cpu->epc  = cpu->pc;
+        cpu->pc  += 4;
+    }
 
     rv_forcefeed_insn(machine, cpu, insn);
-
     return;
+
 iaccess:
     rv_do_trap(
         machine,
