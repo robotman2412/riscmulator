@@ -16,10 +16,12 @@ implemented to IEEE 754 and the RISC-V F/D ISA exactly (correct NaN canonicaliza
 rounding modes, exception flags, FMIN/FMAX NaN rules, etc.).
 
 **Struct responsibilities:**
-- `struct rv_machine` — the entire virtual machine; will eventually hold one or more CPUs,
-  plus RAM bounds, MMIO regions, and other machine-wide state.
-- `struct rv_cpu` — one virtual core. Holds integer/FP registers, all CSRs, and also the
-  **TLB and any other per-core caches**. Do not put TLB or per-core caches in `rv_machine`.
+- `struct rv_machine` — the entire virtual machine. Holds RAM, the CPU array
+  (`cpus` / `cpu_count`), MMIO regions, and all machine-wide synchronization primitives
+  (`atomic_lock`, `reservations[]`).
+- `struct rv_cpu` — one virtual core. Holds integer/FP registers, all CSRs, hart ID, halted
+  flag, and also the **TLB and any other per-core caches**. Do not put TLB or per-core caches
+  in `rv_machine`.
 
 **Fast path.** RAM access must stay on the fast path. Any new layer (MMU translation, MMIO
 dispatch) must be structured so that the common case — a RAM hit — adds minimal overhead
@@ -66,26 +68,83 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 3 — A Extension (Atomics)
+## Stage 3 — Multi-CPU Infrastructure
+
+**Why:** CPUs need to be aware of each other for the A extension (reservations, AMO
+coordination). Adding this now before atomics keeps the two concerns separate and lets Stage 4
+build on a clean multi-CPU foundation.
+
+### What this stage does NOT include
+- Actual A extension instructions (Stage 4).
+- IPI delivery (inter-processor interrupts) — needed for Linux SMP but deferred until it is
+  required by the boot sequence.
+- Per-CPU timers — deferred to the SBI stage.
+
+### Tasks
+
+1. **Extend `struct rv_machine`** (`rv_machine.h` / `rv_machine.c`):
+   - Replace any implicit single-cpu usage with `struct rv_cpu *cpus; size_t cpu_count;`.
+   - Add `pthread_mutex_t atomic_lock;` — the single "big atomic lock" that serialises all LR,
+     SC, and AMO operations across all CPUs (acquired/released by Stage 4; allocated here).
+   - Add `struct rv_reservation { uint64_t addr; bool valid; } *reservations;` — one entry per
+     CPU, indexed by `cpu->csr.mhartid`, also protected by `atomic_lock`. Allocated alongside
+     `cpus`.
+
+2. **Extend `struct rv_cpu`** (`rv_cpu.h`):
+   - Add `bool halted;` — set to stop the CPU's thread (used by WFI, HLT, SBI hart_stop).
+   - Hart identity is already in `cpu->csr.mhartid`; no new field needed.
+
+3. **Machine init / run / destroy** (`rv_machine.c`):
+   - `rv_machine_init(machine, cpu_count, ram_start, ram_size)` — allocates `cpus` and
+     `reservations`, initialises `atomic_lock` via `pthread_mutex_init`, and sets
+     `cpu->csr.mhartid = i` for each CPU.
+   - `rv_machine_run(machine)` — spawns one `pthread` per CPU; each thread runs `rv_step_insn`
+     in a loop until `cpu->halted`; then joins all threads.
+   - `rv_machine_destroy(machine)` — destroys mutex, frees allocations.
+
+4. **Tests** (custom, not riscv-tests):
+   - Single-CPU smoke test: `rv_machine_run` with one CPU running a short sequence; verify
+     final register state.
+   - Two-CPU independence test: two CPUs start at different addresses with different programs;
+     verify each ends in its own expected state without corrupting the other's registers.
+   - Hart-ID test: verify `mhartid` CSR reads 0 on CPU 0 and 1 on CPU 1.
+
+---
+
+## Stage 4 — A Extension (Atomics)
 
 **Why:** Required for any multi-threaded code, lock primitives, and the Linux kernel itself.
+
+### Synchronisation design (decided in pre-stage discussion)
+- **Big atomic lock**: `machine->atomic_lock` (a `pthread_mutex_t`) serialises all LR, SC, and
+  AMO operations. All three instruction families acquire the lock for their full duration —
+  read, modify, write, and reservation update — then release it. No host atomic intrinsics are
+  needed because the mutex already provides mutual exclusion.
+- **Reservation table**: `machine->reservations[cpu->csr.mhartid]` holds each CPU's outstanding
+  LR address. Because the table lives in `rv_machine`, any CPU can inspect and cancel another
+  CPU's reservation while holding `atomic_lock`.
+- **Regular stores do not cancel reservations** by default. This is technically
+  under-conservative vs the spec, but it is sufficient for Linux: LR/SC pairs in the kernel are
+  always tightly paired with no intervening cross-CPU stores to the same address by design.
+  Revisit if correctness problems surface.
 
 ### Tasks
 1. Uncomment rv64ua tests in `riscv_tests.c`. Update `-march` to include `a`.
 2. Add `emulator/src/rv_impl/atomic.c` and `emulator/include/rv_impl/atomic.h`.
 3. Add a case for `RV_OP_MAJ_AMO` in `rv_forcefeed_insn()` dispatching to `rv_atomic_op()`.
-4. Implement:
-   - **LR.W / LR.D** — load-reserved: read word/doubleword, set a reservation on the address (store address in `rv_cpu`).
-   - **SC.W / SC.D** — store-conditional: if reservation still valid, write and set rd=0; else set rd=1. Clear reservation.
-   - **AMO[ADD/AND/OR/XOR/MAX/MAXU/MIN/MINU/SWAP].W/.D** — atomically read, apply op, write back; rd = old value.
-5. Add `uint64_t reservation_addr; bool has_reservation;` fields to `struct rv_cpu` in `rv_cpu.h`.
-6. All rv64ua tests must pass.
-
-**Note:** Since the emulator is single-threaded, LR/SC can be implemented simply — the reservation only needs to fail if SC targets a different address than LR.
+4. Implement, each holding `machine->atomic_lock` for its full duration:
+   - **LR.W / LR.D** — acquire lock → read word/doubleword from RAM → record
+     `reservations[mhartid] = {addr, valid=true}` → release lock. Return the read value.
+   - **SC.W / SC.D** — acquire lock → if `reservations[mhartid].valid && addr matches`: write
+     to RAM, set rd=0, clear own reservation; else set rd=1 → release lock.
+   - **AMO[ADD/AND/OR/XOR/MAX/MAXU/MIN/MINU/SWAP].W/.D** — acquire lock → read old value →
+     compute new value → write to RAM → cancel any reservation whose address overlaps the
+     written address (scan all CPUs' `reservations[]` entries) → release lock. Set rd=old value.
+5. All rv64ua tests must pass.
 
 ---
 
-## Stage 4 — F Extension (Single-Precision Floating Point)
+## Stage 5 — F Extension (Single-Precision Floating Point)
 
 **Why:** Required for RV64G. Linux itself doesn't use FP heavily, but any userspace will.
 
@@ -117,7 +176,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 5 — D Extension (Double-Precision Floating Point)
+## Stage 6 — D Extension (Double-Precision Floating Point)
 
 **Why:** Completes the G profile. Same structure as F.
 
@@ -132,21 +191,23 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
    - FCVT.S.D, FCVT.D.S (conversion between F and D)
    - FMV.X.D, FMV.D.X
 5. Implement FMADD.D, FMSUB.D, FNMADD.D, FNMSUB.D.
-6. **IEEE 754 compliance (strict):** Same rules as Stage 4. Use C `double` for storage.
+6. **IEEE 754 compliance (strict):** Same rules as Stage 5. Use C `double` for storage.
    Canonical NaN is `0x7FF8000000000000`. Apply `fesetround()`/`fetestexcept()` per
    operation. Do not use `fmin()`/`fmax()` for FMIN.D/FMAX.D — implement NaN rules by hand.
 7. All rv64ud tests must pass.
 
 ---
 
-## Stage 6 — Privileged Mode Hardening (rv64mi + rv64si)
+## Stage 7 — Privileged Mode Hardening (rv64mi + rv64si)
 
 **Why:** Linux requires correct M-mode and S-mode behavior. This stage validates that before adding virtual memory.
 
 ### Tasks
 1. Uncomment rv64mi and rv64si test blocks in `riscv_tests.c`.
 2. Fix / implement anything the tests expose. Known gaps:
-   - **WFI** (`SYSTEM` opcode, funct12=0x105): in a single-core emulator, WFI can be a no-op.
+   - **WFI** (`SYSTEM` opcode, funct12=0x105): set `cpu->halted = true` and let the thread
+     block; the run loop should re-check for pending interrupts before resuming. A simple
+     yield (`sched_yield`) is acceptable initially.
    - **MRET / SRET**: restore privilege level from MPP/SPP, restore MIE/SIE from MPIE/SPIE, set MPIE/SPIE=1, set MPP=U (or M for MRET). Verify current implementation in `rv_privileged.c`.
    - **Performance counters**: `instret`, `cycle`, `time` — increment `instret` in `rv_step_insn()`. Wire `time` to host clock if needed.
    - **PMP (Physical Memory Protection)**: rv64mi pmpaddr tests require at least stub PMP CSR support (pmpcfg0, pmpaddr0-15). A no-op implementation that accepts writes and reads them back is acceptable initially.
@@ -156,7 +217,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 7 — Virtual Memory: Sv39
+## Stage 8 — Virtual Memory: Sv39
 
 **Why:** Linux on RISC-V uses the Sv39 paging scheme. Without it, the kernel cannot boot.
 
@@ -185,7 +246,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 8 — MMIO Infrastructure
+## Stage 9 — MMIO Infrastructure
 
 **Why:** Devices like PLIC, UART, and VirtIO are memory-mapped. The machine needs a way to dispatch reads/writes at specific address ranges to device callbacks.
 
@@ -204,12 +265,12 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
    ```
 2. Add `struct rv_mmio_region *mmio; size_t mmio_count;` to `struct rv_machine`.
 3. Add `rv_machine_add_mmio(machine, region)` in `rv_machine.c`.
-4. Update `rv_mem_read()` / `rv_mem_write()` (from Stage 7): after address translation, if the address falls outside RAM, scan MMIO regions and dispatch. If no match, generate an access fault.
+4. Update `rv_mem_read()` / `rv_mem_write()` (from Stage 8): after address translation, if the address falls outside RAM, scan MMIO regions and dispatch. If no match, generate an access fault.
 5. Write a test with a mock MMIO device that records reads/writes and verify dispatch.
 
 ---
 
-## Stage 9 — PLIC (Platform-Level Interrupt Controller)
+## Stage 10 — PLIC (Platform-Level Interrupt Controller)
 
 **Why:** Linux uses PLIC for all external interrupts (UART RX, disk, etc.).
 
@@ -232,7 +293,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 10 — NS16550A UART
+## Stage 11 — NS16550A UART
 
 **Why:** Linux console output and input. This is what lets you see the kernel boot log.
 
@@ -253,7 +314,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 11 — VirtIO Block Device
+## Stage 12 — VirtIO Block Device
 
 **Why:** Linux needs a disk to load the root filesystem from.
 
@@ -274,7 +335,7 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 12 — OpenSBI / SBI Shim + Linux Boot
+## Stage 13 — OpenSBI / SBI Shim + Linux Boot
 
 **Why:** Linux expects an SBI (Supervisor Binary Interface) firmware in M-mode to handle platform calls (console putchar, timer, IPI, etc.). Options: (a) run OpenSBI as the M-mode firmware, (b) implement a minimal SBI shim directly in the emulator.
 
@@ -288,9 +349,8 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
    - `sbi_console_getchar` (legacy, EID=2): read from stdin.
    - `sbi_set_timer` (EID=0, FID=0 / TIME extension): set the calling hart's `mtimecmp` to `a0`;
      clear STIP, set MTIP when timer fires.
-   - `sbi_hart_start` (HSM, EID=0x48534D): for future multi-CPU support — store the target
-     hart ID + start address; the main loop can check and start it. For now, return error if
-     target hart != 0.
+   - `sbi_hart_start` (HSM, EID=0x48534D): validate target hart ID is in range; set the
+     target CPU's PC and a1 register, clear its `halted` flag so its thread resumes.
    - `sbi_hart_stop` (HSM): halt the calling hart (set a stopped flag on `cpu`).
    - `sbi_send_ipi`: no-op for single hart.
    - `sbi_system_reset` (SRST extension): exit emulator.
@@ -309,28 +369,29 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ## Stage Order Summary
 
-| Stage | Feature            | Tests                  | Commit message prefix     |
-|-------|--------------------|------------------------|---------------------------|
-| 1     | M extension        | rv64um (all)           | `feat: implement M extension` |
-| 2     | C extension        | rv64uc rvc             | `feat: implement C extension` |
-| 3     | A extension        | rv64ua (all)           | `feat: implement A extension` |
-| 4     | F extension        | rv64uf (all)           | `feat: implement F extension` |
-| 5     | D extension        | rv64ud (all)           | `feat: implement D extension` |
-| 6     | Privileged hardening | rv64mi + rv64si      | `feat: harden privileged mode` |
-| 7     | Sv39 virtual memory | custom MMU tests      | `feat: implement Sv39 MMU` |
-| 8     | MMIO infrastructure | mock device test      | `feat: add MMIO dispatch` |
-| 9     | PLIC               | PLIC unit tests        | `feat: add PLIC` |
-| 10    | UART NS16550A      | UART unit tests        | `feat: add NS16550A UART` |
-| 11    | VirtIO block       | virtio unit tests      | `feat: add VirtIO block device` |
-| 12    | SBI + Linux boot   | boot integration test  | `feat: boot Linux` |
+| Stage | Feature              | Tests                     | Commit message prefix              |
+|-------|----------------------|---------------------------|------------------------------------|
+| 1     | M extension          | rv64um (all)              | `feat: implement M extension`      |
+| 2     | C extension          | rv64uc rvc                | `feat: implement C extension`      |
+| 3     | Multi-CPU + pthreads | custom multi-cpu tests    | `feat: add multi-CPU infrastructure` |
+| 4     | A extension          | rv64ua (all)              | `feat: implement A extension`      |
+| 5     | F extension          | rv64uf (all)              | `feat: implement F extension`      |
+| 6     | D extension          | rv64ud (all)              | `feat: implement D extension`      |
+| 7     | Privileged hardening | rv64mi + rv64si           | `feat: harden privileged mode`     |
+| 8     | Sv39 virtual memory  | custom MMU tests          | `feat: implement Sv39 MMU`         |
+| 9     | MMIO infrastructure  | mock device test          | `feat: add MMIO dispatch`          |
+| 10    | PLIC                 | PLIC unit tests           | `feat: add PLIC`                   |
+| 11    | UART NS16550A        | UART unit tests           | `feat: add NS16550A UART`          |
+| 12    | VirtIO block         | virtio unit tests         | `feat: add VirtIO block device`    |
+| 13    | SBI + Linux boot     | boot integration test     | `feat: boot Linux`                 |
 
 ---
 
 ## Notes & Open Questions
 
-- **Toolchain**: `riscv64-linux-gnu-` prefix is used in tests. For stages 4-5, confirm the
+- **Toolchain**: `riscv64-linux-gnu-` prefix is used in tests. For stages 5-6, confirm the
   toolchain supports `rv64imafdc`.
-- **FP compliance strategy**: Stages 4-5 require exact IEEE 754 + RISC-V results. The plan
+- **FP compliance strategy**: Stages 5-6 require exact IEEE 754 + RISC-V results. The plan
   uses `fesetround()`/`fetestexcept()` with host `float`/`double`. On x86-64 with SSE2 this
   is bit-exact for normal numbers; edge cases (signaling NaN propagation, FMIN/FMAX NaN rules)
   must be handled manually as noted in those stages. If the rv64uf/ud tests reveal remaining
@@ -346,6 +407,9 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
   without DTS hints). Confirm in DTB which transport to advertise.
 - **Linux config**: Use a minimal `defconfig` + `CONFIG_SERIAL_8250=y`,
   `CONFIG_VIRTIO_BLK=y`, `CONFIG_RISCV_SBI_V01=y`.
-- **Multi-CPU future**: `rv_machine` will hold `struct rv_cpu *cpus; size_t cpu_count;` in the
-  future. Avoid embedding `cpu` pointers in device structs; pass `machine` + hart index
-  instead so devices remain correct when CPUs are added.
+- **Multi-CPU (Stage 3)**: `rv_machine` holds `struct rv_cpu *cpus; size_t cpu_count;`.
+  Avoid embedding `cpu` pointers in device structs; always pass `machine` + `mhartid` index
+  so devices remain correct with multiple CPUs.
+- **Atomics design (Stage 4)**: settled on a single `pthread_mutex_t atomic_lock` in
+  `rv_machine` covering all LR/SC/AMO operations. No host intrinsics. Regular stores do not
+  cancel LR reservations — acceptable for Linux workloads.
