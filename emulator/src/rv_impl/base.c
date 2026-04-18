@@ -36,14 +36,18 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     int64_t lhs_s = lhs;
     int64_t rhs_s = rhs;
 
-    if (RV_INSN_OP_MAJ(insn) & 0b00010) {
+    bool is_32 = RV_INSN_OP_MAJ(insn) & 0b00010;
+    if (is_32) {
         // Is OP-32 or OP-IMM-32; truncate inputs.
         lhs_s    = ((int64_t)lhs << 32) >> 32;
-        rhs_s    = ((int64_t)lhs << 32) >> 32;
+        rhs_s    = ((int64_t)rhs << 32) >> 32;
         lhs      = (uint32_t)lhs;
         rhs      = (uint32_t)rhs;
         rhs_uimm = (uint32_t)rhs_uimm;
     }
+
+    // W-type shifts use rs2[4:0]; 64-bit shifts use rs2[5:0].
+    uint64_t shamt = rhs & (is_32 ? 0x1f : 0x3f);
 
     uint64_t res;
     switch (RV_INSN_FUNCT3(insn)) {
@@ -54,15 +58,15 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
                 res = lhs + rhs; // add, addi
             }
             break;
-        case 1: res = lhs << (rhs % 64); break; // sll, slli
-        case 2: res = lhs_s < rhs_s; break;     // slt, slti
-        case 3: res = lhs < rhs_uimm; break;    // sltu, sltiu
-        case 4: res = lhs ^ rhs; break;         // xor, xori
+        case 1: res = lhs << shamt; break;  // sll, slli, sllw, slliw
+        case 2: res = lhs_s < rhs_s; break; // slt, slti
+        case 3: res = lhs < rhs; break;     // sltu, sltiu
+        case 4: res = lhs ^ rhs; break;     // xor, xori
         case 5:
             if (insn & (1 << 30)) {
-                res = lhs_s >> (rhs % 64); // sra, srai
+                res = lhs_s >> shamt; // sra, srai, sraw, sraiw
             } else {
-                res = lhs >> (rhs % 64); // srl, srli
+                res = lhs >> shamt; // srl, srli, srlw, srliw
             }
             break;
         case 6: res = lhs | rhs; break; // or, ori
@@ -189,10 +193,12 @@ void rv_base_jalr(
 
     // No need to check for IALIGN because this emulator has the C extension
     // always enabled.
+    // Target must be read before writing rd, in case rs1 == rd.
+    uint64_t target =
+        ((int64_t)rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn)) &
+        ~1ULL;
     rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
-    cpu->pc =
-        (int64_t)rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
-    cpu->pc &= ~1;
+    cpu->pc = target;
 }
 
 // Execute an instruction under the LUI or AUPIC major opcodes.
@@ -279,7 +285,7 @@ void rv_base_system(
                 .tval  = 0,
             }
         );
-    } else if (0x00100073) {
+    } else if (insn == 0x00100073) {
         // ebreak
         rv_do_trap(
             machine,

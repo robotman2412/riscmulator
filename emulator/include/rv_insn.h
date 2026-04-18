@@ -60,4 +60,4 @@ enum rv_op_maj {
 #define RV_INSN_IMM12(insn)  ((int32_t)(insn) >> 20)
 // The 12-bit imm field for S-type instructions (signed).
 #define RV_INSN_S_IMM12(insn)                                                  \
-    (((int32_t)((insn) & 0xff000000) >> 20) | ((int32_t)((insn) & 0x380) >> 7))
+    (((int32_t)((insn) & 0xfe000000) >> 20) | ((int32_t)((insn) & 0xf80) >> 7))
