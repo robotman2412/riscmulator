@@ -5,16 +5,23 @@
 #pragma once
 
 #include "rv_csr.h"
+#include "softfloat.h"
 
+#include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
 
 struct rv_machine;
 
+// TODO: Assuming here the host is little-endian;
+// alternative C23-compliant way to bit-cast for big-endian hosts?
 union rv_freg {
-    float    f_32;
-    double   f_64;
-    uint32_t i_32;
-    uint64_t i_64;
+    float     f_32;
+    double    f_64;
+    uint32_t  i_32;
+    uint64_t  i_64;
+    float32_t sf_32;
+    float64_t sf_64;
 };
 
 // One RISC-V CPU core's configuration and state.
@@ -46,14 +53,36 @@ void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu);
 
 // Read from an integer register.
 [[gnu::always_inline]] static inline uint64_t
-    rv_reg_read(struct rv_cpu *cpu, uint32_t index) {
+    rv_xreg_read(struct rv_cpu *cpu, uint32_t index) {
     return cpu->xregs[index];
 }
 
 // Write to an integer register.
 [[gnu::always_inline]] static inline void
-    rv_reg_write(struct rv_cpu *cpu, uint32_t index, uint64_t value) {
+    rv_xreg_write(struct rv_cpu *cpu, uint32_t index, uint64_t value) {
     if (index != 0) {
         cpu->xregs[index] = value;
     }
+}
+
+// Read from an integer register.
+[[gnu::always_inline]] static inline union rv_freg
+    rv_freg_read(struct rv_cpu *cpu, uint32_t index) {
+    return cpu->fregs[index];
+}
+
+// Write to an integer register.
+[[gnu::always_inline]] static inline void
+    rv_freg_write(struct rv_cpu *cpu, uint32_t index, union rv_freg value) {
+    cpu->fregs[index] = value;
+    // printf(
+    //     "\033[34mrv_freg_write(..., %" PRIu32
+    //     ", {.f_64=%lf, .f_32=%f, .i_64=0x%" PRIx64 ", .i_32=0x%" PRIx32
+    //     "})\033[0m\n",
+    //     index,
+    //     value.f_64,
+    //     value.f_32,
+    //     value.i_64,
+    //     value.i_32
+    // );
 }

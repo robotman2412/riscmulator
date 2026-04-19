@@ -41,7 +41,7 @@ void rv_atomic_op(
         return;
     }
 
-    uint64_t addr       = rv_reg_read(cpu, RV_INSN_RS1(insn));
+    uint64_t addr       = rv_xreg_read(cpu, RV_INSN_RS1(insn));
     uint64_t align_mask = is_32 ? 3u : 7u;
 
     if (addr & align_mask) {
@@ -106,13 +106,13 @@ void rv_atomic_op(
 
         pthread_mutex_unlock(&machine->atomic_lock);
 
-        rv_reg_write(cpu, RV_INSN_RD(insn), val);
+        rv_xreg_write(cpu, RV_INSN_RD(insn), val);
         return;
     }
 
     // SC.W / SC.D
     if (funct5 == AMO_SC) {
-        uint64_t rs2val = rv_reg_read(cpu, RV_INSN_RS2(insn));
+        uint64_t rs2val = rv_xreg_read(cpu, RV_INSN_RS2(insn));
 
         pthread_mutex_lock(&machine->atomic_lock);
 
@@ -155,12 +155,12 @@ void rv_atomic_op(
 
         pthread_mutex_unlock(&machine->atomic_lock);
 
-        rv_reg_write(cpu, RV_INSN_RD(insn), success ? 0u : 1u);
+        rv_xreg_write(cpu, RV_INSN_RD(insn), success ? 0u : 1u);
         return;
     }
 
     // AMO read-modify-write operations.
-    uint64_t rs2val = rv_reg_read(cpu, RV_INSN_RS2(insn));
+    uint64_t rs2val = rv_xreg_read(cpu, RV_INSN_RS2(insn));
 
     pthread_mutex_lock(&machine->atomic_lock);
 
@@ -261,5 +261,5 @@ void rv_atomic_op(
 
     pthread_mutex_unlock(&machine->atomic_lock);
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), old);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), old);
 }

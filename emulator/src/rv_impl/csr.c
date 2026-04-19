@@ -40,6 +40,25 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_sscratch: *rdata = cpu->csr.sscratch; break;
         case RV_CSR_satp: *rdata = cpu->csr.satp; break;
 
+        case RV_CSR_fcsr:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            *rdata = cpu->csr.fcsr;
+            break;
+        case RV_CSR_fflags:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            *rdata = cpu->csr.fcsr & RV_FFLAGS_MASK;
+            break;
+        case RV_CSR_frm:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            *rdata = (cpu->csr.fcsr >> RV_FCSR_FRM_BASE_BIT) & RV_FRM_MASK;
+            break;
+
         default: return false;
     }
 
@@ -90,6 +109,27 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
             // TODO: Notify other virtual-memory structures as needed (e.g.
             // ASID, root PPN).
             cpu->csr.satp = wdata;
+            break;
+
+        case RV_CSR_fcsr:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            cpu->csr.fcsr = wdata & RV_FCSR_MASK;
+            break;
+        case RV_CSR_fflags:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            cpu->csr.fcsr &= ~RV_FFLAGS_MASK;
+            cpu->csr.fcsr |= wdata & RV_FFLAGS_MASK;
+            break;
+        case RV_CSR_frm:
+            if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+                return false;
+            }
+            cpu->csr.fcsr &= ~(RV_FRM_MASK << RV_FCSR_FRM_BASE_BIT);
+            cpu->csr.fcsr |= (wdata & RV_FRM_MASK) << RV_FCSR_FRM_BASE_BIT;
             break;
 
         default: return false;

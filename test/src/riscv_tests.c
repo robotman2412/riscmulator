@@ -99,7 +99,6 @@ RISCV_TEST1(rv64um, remu)
 RISCV_TEST1(rv64um, remuw)
 RISCV_TEST1(rv64um, remw)
 
-/*
 RISCV_TEST1(rv64uf, fadd)
 RISCV_TEST1(rv64uf, fdiv)
 RISCV_TEST1(rv64uf, fclass)
@@ -111,9 +110,7 @@ RISCV_TEST1(rv64uf, fmin)
 RISCV_TEST1(rv64uf, ldst)
 RISCV_TEST1(rv64uf, move)
 RISCV_TEST1(rv64uf, recoding)
-*/
 
-/*
 RISCV_TEST1(rv64ud, fadd)
 RISCV_TEST1(rv64ud, fdiv)
 RISCV_TEST1(rv64ud, fclass)
@@ -126,7 +123,6 @@ RISCV_TEST1(rv64ud, ldst)
 RISCV_TEST1(rv64ud, move)
 RISCV_TEST1(rv64ud, structural)
 RISCV_TEST1(rv64ud, recoding)
-*/
 
 RISCV_TEST1(rv64uc, rvc)
 
@@ -269,7 +265,7 @@ static bool compile_riscv_test(char const *set, char const *test) {
             "-Tplain.ld",
             "-nodefaultlibs",
             "-nostartfiles",
-            "-march=rv64imac_zifencei_zicsr",
+            "-march=rv64imafdc_zifencei_zicsr",
             "-mabi=lp64",
             "-fno-pic",
             "-static",
@@ -312,10 +308,10 @@ static bool trap_hook(
         cpu->xregs[17] == 93) {
         if (cpu->xregs[10]) {
             printf(
-                "\033[31m Sub-test %" PRIu64 " failed\033[0m\n",
-                cpu->xregs[10]
+                "\033[31m Sub-test %" PRIu64 " failed\n",
+                cpu->xregs[10] >> 1
             );
-            st->failure = true;
+            goto vmfail;
         }
         st->finished = true;
         return false;
@@ -324,16 +320,22 @@ static bool trap_hook(
     st->trap_count++;
     if (st->trap_count >= 10000) {
         printf(
-            "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64 "\033[0m\n",
+            "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64 "\n",
             trap.epc,
             trap.cause
         );
-        st->failure  = true;
-        st->finished = true;
-        return false;
+        goto vmfail;
     }
 
     return true;
+
+vmfail:
+    st->failure  = true;
+    st->finished = true;
+    printf("  mstatus: %" PRIx64 "\n", cpu->csr.mstatus);
+    printf("  fcsr:    %" PRIx64 "\n", cpu->csr.fcsr);
+    printf("\033[0m");
+    return false;
 }
 
 static bool do_riscv_test(
@@ -387,6 +389,16 @@ static bool do_riscv_test(
 
     while (!st.finished) {
         rv_step_insn(machine, cpu);
+        if ((cpu->xregs[3] & 1337) == 1337) {
+            printf(
+                "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64
+                "\033[0m\n",
+                cpu->csr.mepc,
+                cpu->csr.mcause
+            );
+            st.failure  = true;
+            st.finished = true;
+        }
     }
 
     machine->hook_cookie = nullptr;

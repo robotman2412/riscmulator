@@ -77,7 +77,6 @@ enum rv_xstate {
     ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |    \
      (uint64_t)1 << RV_STATUS_UBE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |     \
      (uint64_t)3 << RV_STATUS_VS_BASE_BIT |                                    \
-     (uint64_t)3 << RV_STATUS_MPP_BASE_BIT |                                   \
      (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
      (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT | \
      (uint64_t)1 << RV_STATUS_MXR_BIT)

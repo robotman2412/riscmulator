@@ -7,6 +7,7 @@
 #include "rv_decompress.h"
 #include "rv_impl/atomics.h"
 #include "rv_impl/base.h"
+#include "rv_impl/float.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
 #include "rv_privileged.h"
@@ -34,6 +35,11 @@ void rv_forcefeed_insn(
         case RV_OP_MAJ_BRANCH: rv_base_branch(machine, cpu, insn); break;
         case RV_OP_MAJ_MISC_MEM: rv_base_miscmem(machine, cpu, insn); break;
         case RV_OP_MAJ_AMO: rv_atomic_op(machine, cpu, insn); break;
+        case RV_OP_MAJ_OP_FP: rv_float_op_fp(machine, cpu, insn); break;
+        case RV_OP_MAJ_MADD:
+        case RV_OP_MAJ_NMADD:
+        case RV_OP_MAJ_MSUB:
+        case RV_OP_MAJ_NMSUB: rv_float_fmadd(machine, cpu, insn); break;
         default: rv_do_iillegal(machine, cpu, insn); break;
     }
 }

@@ -8,6 +8,7 @@ test_src = files(
     'src/multicpu.c',
     'src/op.c',
     'src/riscv_tests.c',
+    'src/softfloat.c',
     'src/trap.c',
 )
 
@@ -19,4 +20,5 @@ test_exe = executable('main',
     test_src,
     include_directories: test_include + emulator_include,
     link_with: emulator_lib,
+    dependencies: [softfloat_dep],
 )

@@ -2,3 +2,5 @@
 build
 riscv-tests-build
 .cache
+subprojects/softfloat/
+subprojects/.wraplock

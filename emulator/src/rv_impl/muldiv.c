@@ -11,7 +11,9 @@
 
 #include <stdint.h>
 
-void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_muldiv_op(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     bool    is_32  = RV_INSN_OP_MAJ(insn) & 0b00010;
     uint8_t funct3 = RV_INSN_FUNCT3(insn);
 
@@ -21,8 +23,8 @@ void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn)
         return;
     }
 
-    uint64_t rs1 = rv_reg_read(cpu, RV_INSN_RS1(insn));
-    uint64_t rs2 = rv_reg_read(cpu, RV_INSN_RS2(insn));
+    uint64_t rs1 = rv_xreg_read(cpu, RV_INSN_RS1(insn));
+    uint64_t rs2 = rv_xreg_read(cpu, RV_INSN_RS2(insn));
 
     int64_t rs1_s = (int64_t)rs1;
     int64_t rs2_s = (int64_t)rs2;
@@ -53,8 +55,9 @@ void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn)
         }
 
         case 3: { // MULHU: upper 64 bits of unsigned*unsigned
-            unsigned __int128 prod = (unsigned __int128)rs1 * (unsigned __int128)rs2;
-            res                    = (uint64_t)(prod >> 64);
+            unsigned __int128 prod =
+                (unsigned __int128)rs1 * (unsigned __int128)rs2;
+            res = (uint64_t)(prod >> 64);
             break;
         }
 
@@ -98,14 +101,12 @@ void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn)
             }
             break;
 
-        default:
-            rv_do_iillegal(machine, cpu, insn);
-            return;
+        default: rv_do_iillegal(machine, cpu, insn); return;
     }
 
     if (is_32) {
         res = (uint64_t)(int64_t)(int32_t)res;
     }
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), res);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), res);
 }

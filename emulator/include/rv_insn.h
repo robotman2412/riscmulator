@@ -22,8 +22,8 @@ enum rv_op_maj {
     RV_OP_MAJ_OP_32     = 0b01110,
     RV_OP_MAJ_MADD      = 0b10000,
     RV_OP_MAJ_MSUB      = 0b10001,
-    RV_OP_MAJ_NMADD     = 0b10010,
-    RV_OP_MAJ_NMSUB     = 0b10011,
+    RV_OP_MAJ_NMSUB     = 0b10010,
+    RV_OP_MAJ_NMADD     = 0b10011,
     RV_OP_MAJ_OP_FP     = 0b10100,
     RV_OP_MAJ_OP_V      = 0b10101,
     RV_OP_MAJ_CUSTOM2   = 0b10110,
@@ -34,6 +34,30 @@ enum rv_op_maj {
     RV_OP_MAJ_SYSTEM    = 0b11100,
     RV_OP_MAJ_OP_VE     = 0b11101,
     RV_OP_MAJ_CUSTOM3   = 0b11110,
+};
+
+// RISC-V floating-point formats.
+enum rv_ffmt {
+    RV_FFMT_F32  = 0b00,
+    RV_FFMT_F64  = 0b01,
+    RV_FFMT_F16  = 0b10,
+    RV_FFMT_F128 = 0b11,
+};
+
+// Floating-point rounding mode.
+enum rv_frm {
+    // Round to nearest, break ties to even.
+    RV_FRM_RNE = 0b000,
+    // Round to zero.
+    RV_FRM_RTZ = 0b001,
+    // Round towards negative infinity.
+    RV_FRM_RDN = 0b010,
+    // Round towards positive infinity.
+    RV_FRM_RUP = 0b011,
+    // Round to nearest, break ties to max magnitude.
+    RV_FRM_RMM = 0b100,
+    // Use rounding mode from the `frm` CSR.
+    RV_FRM_DYN = 0b111,
 };
 
 // Read a bit-field.
@@ -47,12 +71,16 @@ enum rv_op_maj {
 #define RV_INSN_RS1(insn)    RV_INSN_BITFIELD(insn, 15, 0x1f)
 // Second source register.
 #define RV_INSN_RS2(insn)    RV_INSN_BITFIELD(insn, 20, 0x1f)
+// Third source register (for fused multiply-add operations).
+#define RV_INSN_RS3(insn)    RV_INSN_BITFIELD(insn, 27, 0x1f)
 // Destination register.
 #define RV_INSN_RD(insn)     RV_INSN_BITFIELD(insn, 7, 0x1f)
 // Funct3 field.
 #define RV_INSN_FUNCT3(insn) RV_INSN_BITFIELD(insn, 12, 0x7)
 // Funct7 field.
 #define RV_INSN_FUNCT7(insn) RV_INSN_BITFIELD(insn, 25, 0x7f)
+// Funct5 field as seen in float ops.
+#define RV_INSN_FUNCT5(insn) RV_INSN_BITFIELD(insn, 27, 0x1f)
 
 // The 12-bit imm field (unsigned).
 #define RV_INSN_UIMM12(insn) ((uint32_t)(insn) >> 20)
@@ -61,3 +89,6 @@ enum rv_op_maj {
 // The 12-bit imm field for S-type instructions (signed).
 #define RV_INSN_S_IMM12(insn)                                                  \
     (((int32_t)((insn) & 0xfe000000) >> 20) | ((int32_t)((insn) & 0xf80) >> 7))
+
+// The OP-FP float format field.
+#define RV_INSN_FFMT(insn) RV_INSN_BITFIELD(insn, 25, 0x3)

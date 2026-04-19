@@ -25,11 +25,11 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
         return;
     }
 
-    uint64_t lhs = rv_reg_read(cpu, RV_INSN_RS1(insn));
+    uint64_t lhs = rv_xreg_read(cpu, RV_INSN_RS1(insn));
     uint64_t rhs, rhs_uimm;
     if (RV_INSN_OP_MAJ(insn) & 0b01000) {
         // Is OP or OP-32.
-        rhs = rhs_uimm = rv_reg_read(cpu, RV_INSN_RS2(insn));
+        rhs = rhs_uimm = rv_xreg_read(cpu, RV_INSN_RS2(insn));
     } else {
         // Is OP-IMM or OP-IMM-32.
         rhs      = RV_INSN_IMM12(insn);
@@ -83,14 +83,26 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
         res = ((int64_t)res << 32) >> 32;
     }
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), res);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), res);
 }
 
 // Execute an instruction under the LOAD or LOAD-FP major opcodes.
 void rv_base_load(
     struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
 ) {
-    uint64_t addr = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
+    bool     is_load_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
+    uint64_t addr = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
+
+    if (is_load_fp && !RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+        // Float ops disabled.
+        rv_do_iillegal(machine, cpu, insn);
+        return;
+    }
+    if (is_load_fp && (RV_INSN_FUNCT3(insn) & 0x6) != 0x2) {
+        // Invalid size.
+        rv_do_iillegal(machine, cpu, insn);
+        return;
+    }
 
     uint64_t rdata;
     switch (RV_INSN_FUNCT3(insn)) {
@@ -103,6 +115,9 @@ void rv_base_load(
         case 2:
             RV_READ_RAM(*machine, int32_t, addr, rdata, goto laccess;);
             break;
+        case 3:
+            RV_READ_RAM(*machine, int64_t, addr, rdata, goto laccess;);
+            break;
         case 4:
             RV_READ_RAM(*machine, uint8_t, addr, rdata, goto laccess;);
             break;
@@ -112,14 +127,18 @@ void rv_base_load(
         case 6:
             RV_READ_RAM(*machine, uint32_t, addr, rdata, goto laccess;);
             break;
-        case 3:
-        case 7:
-            RV_READ_RAM(*machine, uint64_t, addr, rdata, goto laccess;);
-            break;
-        default: rdata = 0; // Unreachable.
+        default: rv_do_iillegal(machine, cpu, insn); return;
     }
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), rdata);
+    if (is_load_fp) {
+        if (RV_INSN_FUNCT3(insn) == 2) {
+            // flw: NaN-box the 32-bit float in the upper 32 bits.
+            rdata |= 0xffffffff00000000;
+        }
+        rv_freg_write(cpu, RV_INSN_RD(insn), (union rv_freg){.i_64 = rdata});
+    } else {
+        rv_xreg_write(cpu, RV_INSN_RD(insn), rdata);
+    }
 
     return;
 laccess:
@@ -138,8 +157,22 @@ laccess:
 void rv_base_store(
     struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
 ) {
-    uint64_t addr = rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
-    uint64_t wdata = rv_reg_read(cpu, RV_INSN_RS2(insn));
+    bool     is_store_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
+    uint64_t addr =
+        rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
+    uint64_t wdata = is_store_fp ? rv_freg_read(cpu, RV_INSN_RS2(insn)).i_64
+                                 : rv_xreg_read(cpu, RV_INSN_RS2(insn));
+
+    if (is_store_fp && !RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
+        // Float ops disabled.
+        rv_do_iillegal(machine, cpu, insn);
+        return;
+    }
+    if (is_store_fp && (RV_INSN_FUNCT3(insn) & 0x6) != 0x2) {
+        // Invalid size.
+        rv_do_iillegal(machine, cpu, insn);
+        return;
+    }
 
     switch (RV_INSN_FUNCT3(insn) & 3) {
         case 0:
@@ -154,7 +187,7 @@ void rv_base_store(
         case 3:
             RV_WRITE_RAM(*machine, uint64_t, addr, wdata, goto saccess;);
             break;
-        default: // Unreachable.
+        default: rv_do_iillegal(machine, cpu, insn); return;
     }
 
     return;
@@ -185,7 +218,7 @@ void rv_base_jal(
 
     // No need to check for IALIGN because this emulator has the C extension
     // always enabled.
-    rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), cpu->pc);
     cpu->pc = cpu->epc + imm;
 }
 
@@ -199,9 +232,9 @@ void rv_base_jalr(
     // always enabled.
     // Target must be read before writing rd, in case rs1 == rd.
     uint64_t target =
-        ((int64_t)rv_reg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn)) &
+        ((int64_t)rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn)) &
         ~1ULL;
-    rv_reg_write(cpu, RV_INSN_RD(insn), cpu->pc);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), cpu->pc);
     cpu->pc = target;
 }
 
@@ -216,7 +249,7 @@ void rv_base_lui(
         res += cpu->epc; // auipc
     }
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), res);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), res);
 }
 
 // Implementation of CSR operations.
@@ -229,8 +262,9 @@ static void
         wdata    = RV_INSN_RS1(insn);
         do_write = true;
     } else {
-        wdata    = rv_reg_read(cpu, RV_INSN_RS1(insn));
-        do_write = RV_INSN_RS1(insn) != 0;
+        wdata = rv_xreg_read(cpu, RV_INSN_RS1(insn));
+        // CSRRW always writes; CSRRS/CSRRC skip the write when rs1=x0.
+        do_write = ((RV_INSN_FUNCT3(insn) & 3) == 1) || (RV_INSN_RS1(insn) != 0);
     }
 
     uint64_t rdata = 0;
@@ -255,7 +289,7 @@ static void
         }
     }
 
-    rv_reg_write(cpu, RV_INSN_RD(insn), rdata);
+    rv_xreg_write(cpu, RV_INSN_RD(insn), rdata);
 }
 
 // Execute an instruction under the SYSTEM major opcode.
@@ -326,8 +360,8 @@ void rv_base_branch(
     int32_t imm_12   = (int32_t)insn >> 31 << 12;
     int32_t imm      = imm_4_1 | imm_10_5 | imm_11 | imm_12;
 
-    uint64_t lhs   = rv_reg_read(cpu, RV_INSN_RS1(insn));
-    uint64_t rhs   = rv_reg_read(cpu, RV_INSN_RS2(insn));
+    uint64_t lhs   = rv_xreg_read(cpu, RV_INSN_RS1(insn));
+    uint64_t rhs   = rv_xreg_read(cpu, RV_INSN_RS2(insn));
     int64_t  lhs_s = lhs;
     int64_t  rhs_s = rhs;
 
