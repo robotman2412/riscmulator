@@ -22,6 +22,7 @@ struct rv_csr_state {
     uint64_t mie, mip, mideleg, medeleg, mtvec;
     // Exception status: M-mode.
     uint64_t mcause, mtval, mepc, mtinst;
+
     // Exception control: S-mode.
     uint64_t sie, sip, stvec;
     // Exception status: S-mode.
@@ -30,6 +31,21 @@ struct rv_csr_state {
     uint64_t sscratch, mscratch;
     // Virtual memory control.
     uint64_t satp;
+
+    // Floating-point status and rounding mode.
+    uint64_t fcsr;
+};
+
+// Extension state bits.
+enum rv_xstate {
+    // Disabled.
+    RV_XSTATE_OFF     = 0b00,
+    // Initial state (e.g. zeroed registers).
+    RV_XSTATE_INITIAL = 0b01,
+    // Clean state (no change since last set to clean).
+    RV_XSTATE_CLEAN   = 0b10,
+    // Dirty state (some changes).
+    RV_XSTATE_DIRTY   = 0b11,
 };
 
 #define RV_STATUS_SIE_BIT      1
@@ -47,19 +63,51 @@ struct rv_csr_state {
 #define RV_STATUS_MXR_BIT      19
 
 #define RV_MSTATUS_MASK                                                        \
-    RV_STATUS_SIE_BIT || RV_STATUS_MIE_BIT || RV_STATUS_SPIE_BIT ||            \
-        RV_STATUS_UBE_BIT || RV_STATUS_MPIE_BIT || RV_STATUS_SPP_BIT ||        \
-        3 * RV_STATUS_VS_BASE_BIT || 3 * RV_STATUS_MPP_BASE_BIT ||             \
-        3 * RV_STATUS_FS_BASE_BIT || 3 * RV_STATUS_XS_BASE_BIT ||              \
-        RV_STATUS_MPRV_BIT || RV_STATUS_SUM_BIT || RV_STATUS_MXR_BIT
+    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_MIE_BIT |     \
+     (uint64_t)1 << RV_STATUS_SPIE_BIT | (uint64_t)1 << RV_STATUS_UBE_BIT |    \
+     (uint64_t)1 << RV_STATUS_MPIE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |    \
+     (uint64_t)3 << RV_STATUS_VS_BASE_BIT |                                    \
+     (uint64_t)3 << RV_STATUS_MPP_BASE_BIT |                                   \
+     (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
+     (uint64_t)3 << RV_STATUS_XS_BASE_BIT |                                    \
+     (uint64_t)1 << RV_STATUS_MPRV_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT |    \
+     (uint64_t)1 << RV_STATUS_MXR_BIT)
 
 #define RV_SSTATUS_MASK                                                        \
-    RV_STATUS_SIE_BIT || RV_STATUS_SPIE_BIT || RV_STATUS_UBE_BIT ||            \
-        RV_STATUS_SPP_BIT || 3 * RV_STATUS_VS_BASE_BIT ||                      \
-        3 * RV_STATUS_MPP_BASE_BIT || 3 * RV_STATUS_FS_BASE_BIT ||             \
-        3 * RV_STATUS_XS_BASE_BIT || RV_STATUS_SUM_BIT || RV_STATUS_MXR_BIT
+    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |    \
+     (uint64_t)1 << RV_STATUS_UBE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |     \
+     (uint64_t)3 << RV_STATUS_VS_BASE_BIT |                                    \
+     (uint64_t)3 << RV_STATUS_MPP_BASE_BIT |                                   \
+     (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
+     (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT | \
+     (uint64_t)1 << RV_STATUS_MXR_BIT)
+
+// Invalid operation.
+#define RV_FFLAGS_NV_BIT 4
+// Division by zero.
+#define RV_FFLAGS_DZ_BIT 3
+// Overflow.
+#define RV_FFLAGS_OF_BIT 2
+// Underflow.
+#define RV_FFLAGS_UF_BIT 1
+// Inexact operation.
+#define RV_FFLAGS_NX_BIT 0
+
+// Position of rounding mode in `fcsr`.
+#define RV_FCSR_FRM_BASE_BIT 5
+
+// Implemented bits in `fflags`.
+#define RV_FFLAGS_MASK 0x1f
+// Implemented bits in `frm`.
+#define RV_FRM_MASK    0x7
+// Implemented bits in `fcsr`.
+#define RV_FCSR_MASK   (RV_FRM_MASK << RV_FCSR_FRM_BASE_BIT | RV_FFLAGS_MASK)
 
 // Get the name of a CSR; returns `nullptr` if invalid.
 [[gnu::const]] char const *rv_csr_to_name(enum rv_csr csr);
 // Get a CSR by name; returns 0 if not found.
 [[gnu::const]] enum rv_csr rv_csr_from_name(char const *name);
+
+// Check extension enable bits.
+#define RV_CHECK_XS(bits, xs_base_bit)                                         \
+    ((((bits) >> (xs_base_bit)) & 3) != RV_XSTATE_OFF)

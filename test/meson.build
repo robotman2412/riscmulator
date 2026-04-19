@@ -1,5 +1,6 @@
 
 test_src = files(
+    'src/atomics.c',
     'src/branch.c',
     'src/decompress.c',
     'src/main.c',

@@ -5,6 +5,7 @@
 #include "rv_cpu.h"
 
 #include "rv_decompress.h"
+#include "rv_impl/atomics.h"
 #include "rv_impl/base.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
@@ -32,6 +33,7 @@ void rv_forcefeed_insn(
         case RV_OP_MAJ_SYSTEM: rv_base_system(machine, cpu, insn); break;
         case RV_OP_MAJ_BRANCH: rv_base_branch(machine, cpu, insn); break;
         case RV_OP_MAJ_MISC_MEM: rv_base_miscmem(machine, cpu, insn); break;
+        case RV_OP_MAJ_AMO: rv_atomic_op(machine, cpu, insn); break;
         default: rv_do_iillegal(machine, cpu, insn); break;
     }
 }

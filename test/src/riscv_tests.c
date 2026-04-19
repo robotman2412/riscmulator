@@ -130,7 +130,6 @@ RISCV_TEST1(rv64ud, recoding)
 
 RISCV_TEST1(rv64uc, rvc)
 
-/*
 RISCV_TEST1(rv64ua, amoadd_d)
 RISCV_TEST1(rv64ua, amoand_d)
 RISCV_TEST1(rv64ua, amomax_d)
@@ -150,7 +149,6 @@ RISCV_TEST1(rv64ua, amoor_w)
 RISCV_TEST1(rv64ua, amoxor_w)
 RISCV_TEST1(rv64ua, amoswap_w)
 RISCV_TEST1(rv64ua, lrsc)
-*/
 
 /*
 RISCV_TEST1(rv64si, csr)
@@ -271,7 +269,7 @@ static bool compile_riscv_test(char const *set, char const *test) {
             "-Tplain.ld",
             "-nodefaultlibs",
             "-nostartfiles",
-            "-march=rv64imc_zifencei_zicsr",
+            "-march=rv64imac_zifencei_zicsr",
             "-mabi=lp64",
             "-fno-pic",
             "-static",
@@ -362,14 +360,18 @@ static bool do_riscv_test(
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    uint8_t *ram = realloc(machine->ram, len);
+    // Allocate one extra page beyond the binary to cover .bss sections that
+    // objcopy omits from the flat binary (MemSiz > FileSiz in PT_LOAD).
+    size_t   alloc = (size_t)len + 0x1000;
+    uint8_t *ram   = realloc(machine->ram, alloc);
     if (!ram) {
         fclose(f);
         return false;
     }
     machine->ram       = ram;
     machine->ram_start = 0x10000;
-    machine->ram_end   = 0x10000 + len;
+    machine->ram_end   = 0x10000 + alloc;
+    memset(machine->ram, 0, alloc);
     fread(machine->ram, 1, len, f);
     fclose(f);
 
