@@ -29,176 +29,79 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Stage 1 — M Extension (Multiply/Divide)
-
-**Why first:** `muldiv.c` is already wired into the build but empty. Tests exist (commented out in `riscv_tests.c`). Most C code uses multiply/divide.
-
-### Tasks
-1. Uncomment the rv64um block in `test/src/riscv_tests.c` (compile step already uses `-march=rv64i_zifencei_zicsr` — extend to `rv64im_...`).
-2. Implement `emulator/src/rv_impl/muldiv.c`:
-   - The M extension reuses `RV_OP_MAJ_OP` / `RV_OP_MAJ_OP_32` opcodes with `funct7 = 0x01`.
-   - Add a branch in `rv_base_op()` in `base.c` that dispatches to `rv_muldiv_op()` when `funct7 == 0x01`.
-   - Instructions: `MUL`, `MULH`, `MULHSU`, `MULHU`, `MULW`, `DIV`, `DIVU`, `DIVW`, `DIVUW`, `REM`, `REMU`, `REMW`, `REMUW`.
-   - Per spec: division by zero → quotient = -1 (or MAX_UINT for unsigned), remainder = dividend. Overflow (INT64_MIN / -1) → quotient = INT64_MIN, remainder = 0.
-3. Add a header `emulator/include/rv_impl/muldiv.h` declaring the dispatch function.
-4. Update `emulator/src/rv_impl/meson.build` to compile `muldiv.c`.
-5. All rv64um tests must pass.
-
-**Compile flag note:** change `-march=rv64i_zifencei_zicsr` → `-march=rv64im_zifencei_zicsr` when compiling um tests.
+## ~~M Extension (Multiply/Divide)~~ ✓ DONE
 
 ---
 
-## Stage 2 — C Extension (Compressed Instructions)
-
-**Why second:** GCC emits C-extension code by default (`-march=rv64gc`). Without this, real toolchain output won't run.
-
-### Tasks
-1. Implement `emulator/src/rv_decompress.c` — a pure function `uint32_t rv_decompress(uint16_t insn)` that returns the equivalent 32-bit instruction (or an illegal-instruction word on unknown encoding).
-   - Quadrant 0 (bits[1:0] = 00): C.ADDI4SPN, C.FLD, C.LW, C.LD, C.FSD, C.SW, C.SD
-   - Quadrant 1 (bits[1:0] = 01): C.ADDI, C.ADDIW, C.LI, C.ADDI16SP, C.LUI, C.SRLI, C.SRAI, C.ANDI, C.SUB, C.XOR, C.OR, C.AND, C.SUBW, C.ADDW, C.J, C.BEQZ, C.BNEZ
-   - Quadrant 2 (bits[1:0] = 10): C.SLLI, C.FLDSP, C.LWSP, C.LDSP, C.JR, C.MV, C.EBREAK, C.JALR, C.ADD, C.FSDSP, C.SWSP, C.SDSP
-2. Modify `rv_step_insn()` in `rv_cpu.c`:
-   - Read a 16-bit halfword first.
-   - If bits[1:0] != 0b11: it's a compressed instruction. Call `rv_decompress()`, advance PC by 2, force-feed the result.
-   - If bits[1:0] == 0b11: read the upper halfword too (full 32-bit), advance PC by 4 as before.
-3. Uncomment `RISCV_TEST1(rv64uc, rvc)` in `riscv_tests.c`. Update compile `-march` to include `c`.
-4. All rv64uc tests must pass.
-
-**Note:** `rv_decompress` translates to standard 32-bit encodings — the existing executor handles everything after that with no changes.
+## ~~C Extension (Compressed Instructions)~~ ✓ DONE
 
 ---
 
-## Stage 3 — Multi-CPU Infrastructure
-
-**Why:** CPUs need to be aware of each other for the A extension (reservations, AMO
-coordination). Adding this now before atomics keeps the two concerns separate and lets Stage 4
-build on a clean multi-CPU foundation.
-
-### What this stage does NOT include
-- Actual A extension instructions (Stage 4).
-- IPI delivery (inter-processor interrupts) — needed for Linux SMP but deferred until it is
-  required by the boot sequence.
-- Per-CPU timers — deferred to the SBI stage.
-
-### Tasks
-
-1. **Extend `struct rv_machine`** (`rv_machine.h` / `rv_machine.c`):
-   - Replace any implicit single-cpu usage with `struct rv_cpu *cpus; size_t cpu_count;`.
-   - Add `pthread_mutex_t atomic_lock;` — the single "big atomic lock" that serialises all LR,
-     SC, and AMO operations across all CPUs (acquired/released by Stage 4; allocated here).
-   - Add `struct rv_reservation { uint64_t addr; bool valid; } *reservations;` — one entry per
-     CPU, indexed by `cpu->csr.mhartid`, also protected by `atomic_lock`. Allocated alongside
-     `cpus`.
-
-2. **Extend `struct rv_cpu`** (`rv_cpu.h`):
-   - Add `bool halted;` — set to stop the CPU's thread (used by WFI, HLT, SBI hart_stop).
-   - Hart identity is already in `cpu->csr.mhartid`; no new field needed.
-
-3. **Machine init / run / destroy** (`rv_machine.c`):
-   - `rv_machine_init(machine, cpu_count, ram_start, ram_size)` — allocates `cpus` and
-     `reservations`, initialises `atomic_lock` via `pthread_mutex_init`, and sets
-     `cpu->csr.mhartid = i` for each CPU.
-   - `rv_machine_run(machine)` — spawns one `pthread` per CPU; each thread runs `rv_step_insn`
-     in a loop until `cpu->halted`; then joins all threads.
-   - `rv_machine_destroy(machine)` — destroys mutex, frees allocations.
-
-4. **Tests** (custom, not riscv-tests):
-   - Single-CPU smoke test: `rv_machine_run` with one CPU running a short sequence; verify
-     final register state.
-   - Two-CPU independence test: two CPUs start at different addresses with different programs;
-     verify each ends in its own expected state without corrupting the other's registers.
-   - Hart-ID test: verify `mhartid` CSR reads 0 on CPU 0 and 1 on CPU 1.
+## ~~Multi-CPU Infrastructure~~ ✓ DONE
 
 ---
 
-## Stage 4 — A Extension (Atomics)
-
-**Why:** Required for any multi-threaded code, lock primitives, and the Linux kernel itself.
-
-### Synchronisation design (decided in pre-stage discussion)
-- **Big atomic lock**: `machine->atomic_lock` (a `pthread_mutex_t`) serialises all LR, SC, and
-  AMO operations. All three instruction families acquire the lock for their full duration —
-  read, modify, write, and reservation update — then release it. No host atomic intrinsics are
-  needed because the mutex already provides mutual exclusion.
-- **Reservation table**: `machine->reservations[cpu->csr.mhartid]` holds each CPU's outstanding
-  LR address. Because the table lives in `rv_machine`, any CPU can inspect and cancel another
-  CPU's reservation while holding `atomic_lock`.
-- **Regular stores do not cancel reservations** by default. This is technically
-  under-conservative vs the spec, but it is sufficient for Linux: LR/SC pairs in the kernel are
-  always tightly paired with no intervening cross-CPU stores to the same address by design.
-  Revisit if correctness problems surface.
-
-### Tasks
-1. Uncomment rv64ua tests in `riscv_tests.c`. Update `-march` to include `a`.
-2. Add `emulator/src/rv_impl/atomic.c` and `emulator/include/rv_impl/atomic.h`.
-3. Add a case for `RV_OP_MAJ_AMO` in `rv_forcefeed_insn()` dispatching to `rv_atomic_op()`.
-4. Implement, each holding `machine->atomic_lock` for its full duration:
-   - **LR.W / LR.D** — acquire lock → read word/doubleword from RAM → record
-     `reservations[mhartid] = {addr, valid=true}` → release lock. Return the read value.
-   - **SC.W / SC.D** — acquire lock → if `reservations[mhartid].valid && addr matches`: write
-     to RAM, set rd=0, clear own reservation; else set rd=1 → release lock.
-   - **AMO[ADD/AND/OR/XOR/MAX/MAXU/MIN/MINU/SWAP].W/.D** — acquire lock → read old value →
-     compute new value → write to RAM → cancel any reservation whose address overlaps the
-     written address (scan all CPUs' `reservations[]` entries) → release lock. Set rd=old value.
-5. All rv64ua tests must pass.
+## ~~A Extension (Atomics)~~ ✓ DONE
 
 ---
 
-## Stage 5 — F Extension (Single-Precision Floating Point)
-
-**Why:** Required for RV64G. Linux itself doesn't use FP heavily, but any userspace will.
-
-### Tasks
-1. Uncomment rv64uf tests. Update `-march` to include `f`.
-2. Add `emulator/src/rv_impl/fp_single.c` and header.
-3. Implement FCSR register support in `rv_csr.c` (frm, fflags — rounding mode and exception flags).
-4. Implement FLW / FSW (load/store float) — extend `rv_base_load` / `rv_base_store` for `RV_OP_MAJ_LOAD_FP` / `RV_OP_MAJ_STORE_FP` with funct3=010.
-5. Implement all F instructions under `RV_OP_MAJ_OP_FP` with funct7 selecting the operation:
-   - Arithmetic: FADD.S, FSUB.S, FMUL.S, FDIV.S, FSQRT.S
-   - Min/max: FMIN.S, FMAX.S
-   - Comparisons: FEQ.S, FLT.S, FLE.S
-   - Sign injection: FSGNJ.S, FSGNJN.S, FSGNJX.S
-   - Classify: FCLASS.S
-   - Conversions: FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S, FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
-   - Move: FMV.X.W, FMV.W.X
-6. Implement fused multiply-add opcodes: FMADD.S, FMSUB.S, FNMADD.S, FNMSUB.S (separate major opcodes).
-7. **IEEE 754 compliance (strict):** Use C `float` for bit storage, but every operation must
-   match the RISC-V spec exactly:
-   - Before each operation, call `fesetround()` to match the current `fcsr.frm` rounding mode
-     (DYN mode reads `frm` per-instruction).
-   - After each operation, read `fetestexcept()` and accumulate into `fcsr.fflags`.
-   - Canonical NaN: any result NaN must be normalized to `0x7FC00000` (positive quiet NaN).
-   - FMIN/FMAX: if exactly one input is a signaling NaN, raise invalid and return the
-     canonical NaN; if exactly one input is a quiet NaN, return the other (non-NaN) operand.
-     This differs from `fmin()`/`fmax()` in C — do **not** use those directly.
-   - FEQ with a signaling NaN raises invalid; FLT and FLE always raise invalid on any NaN.
-8. All rv64uf tests must pass.
+## ~~F Extension (Single-Precision Floating Point)~~ ✓ DONE
 
 ---
 
-## Stage 6 — D Extension (Double-Precision Floating Point)
-
-**Why:** Completes the G profile. Same structure as F.
-
-### Tasks
-1. Uncomment rv64ud tests. Update `-march` to include `d`.
-2. Add `emulator/src/rv_impl/fp_double.c` and header.
-3. Implement FLD / FSD (funct3=011 for LOAD_FP / STORE_FP).
-4. Implement all D instructions (same list as F but .D suffix, funct7 values differ):
-   - FADD.D, FSUB.D, FMUL.D, FDIV.D, FSQRT.D, FMIN.D, FMAX.D
-   - FEQ.D, FLT.D, FLE.D, FSGNJ.D, FSGNJN.D, FSGNJX.D, FCLASS.D
-   - FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D, FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
-   - FCVT.S.D, FCVT.D.S (conversion between F and D)
-   - FMV.X.D, FMV.D.X
-5. Implement FMADD.D, FMSUB.D, FNMADD.D, FNMSUB.D.
-6. **IEEE 754 compliance (strict):** Same rules as Stage 5. Use C `double` for storage.
-   Canonical NaN is `0x7FF8000000000000`. Apply `fesetround()`/`fetestexcept()` per
-   operation. Do not use `fmin()`/`fmax()` for FMIN.D/FMAX.D — implement NaN rules by hand.
-7. All rv64ud tests must pass.
+## ~~D Extension (Double-Precision Floating Point)~~ ✓ DONE
 
 ---
 
-## Stage 7 — Privileged Mode Hardening (rv64mi + rv64si)
+## Memory Access Layer Refactor (rv_mem)
+
+**Why now:** Before adding PMP and Sv39 paging, the RAM access layer must be restructured so
+page-boundary-crossing and eventually address translation can be handled cleanly in one place.
+The current `RV_READ_RAM` / `RV_WRITE_RAM` macros perform a single pointer-cast and cannot
+split accesses that cross a page boundary (where virtual→physical translation may yield
+non-contiguous physical pages).
+
+### Design decisions
+
+- **`cpu` parameter added now** — `rv_mem_read/write` take `struct rv_cpu *cpu` even though
+  it is currently unused (`(void)cpu`). This avoids a second refactor when Sv39 is added and
+  `cpu->csr.satp` / privilege level are needed for translation.
+- **Unsigned outputs; caller sign-extends** — functions always write to `uint8/16/32/64_t *`.
+  LB/LH/LW sign extension is done by the load instruction handlers, not the memory layer.
+- **Page boundary splitting** — any multi-byte access that straddles a page boundary is split
+  at the boundary into two independently translated sub-accesses. This is legal per the
+  RISC-V spec and correctly handles the case where the two pages map to non-contiguous physical
+  memory.
+- **`phys_read/write` internals** — raw RAM range check plus `memcpy`; returns `false` on OOB.
+  Future: will also dispatch to MMIO when address is outside RAM.
+- **Atomics are always naturally aligned** — the atomics code enforces natural alignment before
+  reaching the memory layer, so aligned 4/8-byte accesses never cross a page boundary (page
+  size 4 KiB is a multiple of 8). No special handling needed there.
+
+### Tasks
+
+1. Write tests in `test/src/mem.c`:
+   - `mem_basic` — direct `rv_mem_read/write` round-trips for all sizes within one page.
+   - `mem_page_boundary` — uint16/32/64 writes and reads that cross the page boundary at
+     `0x2000` (machine RAM = 2 pages from `0x1000`); verify per-byte layout and read-back.
+   - `mem_oob` — accesses before RAM start, after RAM end, and straddling the end return `false`.
+2. Create `emulator/include/rv_mem.h` declaring:
+   `rv_mem_read8/16/32/64(machine, cpu, addr, out*)` and `rv_mem_write8/16/32/64(...)`.
+   Also define `RV_PAGE_SIZE 4096` here.
+3. Create `emulator/src/rv_mem.c` with static helpers `phys_read/write` and `mem_read/write`
+   (page-split logic), then the eight public functions.
+4. Add `'src/rv_mem.c'` to `emulator_src` in `emulator/meson.build`.
+5. Remove `RV_READ_RAM` / `RV_WRITE_RAM` from `emulator/include/rv_machine.h`.
+6. Update call sites:
+   - `rv_cpu.c`: two `RV_READ_RAM` → `rv_mem_read16` for instruction fetch.
+   - `rv_impl/base.c`: all load `RV_READ_RAM` (with explicit sign/zero casts) and store
+     `RV_WRITE_RAM` → typed `rv_mem_read/write`.
+   - `rv_impl/atomics.c`: LR, SC, and AMO read/write macros → `rv_mem_read/write32/64`.
+7. All existing and new tests must pass.
+
+---
+
+## Privileged Mode Hardening (rv64mi + rv64si)
 
 **Why:** Linux requires correct M-mode and S-mode behavior. This stage validates that before adding virtual memory.
 
@@ -217,7 +120,7 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage 8 — Virtual Memory: Sv39
+## Virtual Memory: Sv39
 
 **Why:** Linux on RISC-V uses the Sv39 paging scheme. Without it, the kernel cannot boot.
 
@@ -246,7 +149,7 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage 9 — MMIO Infrastructure
+## MMIO Infrastructure
 
 **Why:** Devices like PLIC, UART, and VirtIO are memory-mapped. The machine needs a way to dispatch reads/writes at specific address ranges to device callbacks.
 
@@ -265,12 +168,12 @@ build on a clean multi-CPU foundation.
    ```
 2. Add `struct rv_mmio_region *mmio; size_t mmio_count;` to `struct rv_machine`.
 3. Add `rv_machine_add_mmio(machine, region)` in `rv_machine.c`.
-4. Update `rv_mem_read()` / `rv_mem_write()` (from Stage 8): after address translation, if the address falls outside RAM, scan MMIO regions and dispatch. If no match, generate an access fault.
+4. Update `rv_mem_read()` / `rv_mem_write()` (from Sv39 stage): after address translation, if the address falls outside RAM, scan MMIO regions and dispatch. If no match, generate an access fault.
 5. Write a test with a mock MMIO device that records reads/writes and verify dispatch.
 
 ---
 
-## Stage 10 — PLIC (Platform-Level Interrupt Controller)
+## PLIC (Platform-Level Interrupt Controller)
 
 **Why:** Linux uses PLIC for all external interrupts (UART RX, disk, etc.).
 
@@ -293,7 +196,7 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage 11 — NS16550A UART
+## NS16550A UART
 
 **Why:** Linux console output and input. This is what lets you see the kernel boot log.
 
@@ -314,7 +217,7 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage 12 — VirtIO Block Device
+## VirtIO Block Device
 
 **Why:** Linux needs a disk to load the root filesystem from.
 
@@ -335,7 +238,7 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage 13 — OpenSBI / SBI Shim + Linux Boot
+## OpenSBI / SBI Shim + Linux Boot
 
 **Why:** Linux expects an SBI (Supervisor Binary Interface) firmware in M-mode to handle platform calls (console putchar, timer, IPI, etc.). Options: (a) run OpenSBI as the M-mode firmware, (b) implement a minimal SBI shim directly in the emulator.
 
@@ -367,36 +270,30 @@ build on a clean multi-CPU foundation.
 
 ---
 
-## Stage Order Summary
+## Stage Summary
 
-| Stage | Feature              | Tests                     | Commit message prefix              |
-|-------|----------------------|---------------------------|------------------------------------|
-| 1     | M extension          | rv64um (all)              | `feat: implement M extension`      |
-| 2     | C extension          | rv64uc rvc                | `feat: implement C extension`      |
-| 3     | Multi-CPU + pthreads | custom multi-cpu tests    | `feat: add multi-CPU infrastructure` |
-| 4     | A extension          | rv64ua (all)              | `feat: implement A extension`      |
-| 5     | F extension          | rv64uf (all)              | `feat: implement F extension`      |
-| 6     | D extension          | rv64ud (all)              | `feat: implement D extension`      |
-| 7     | Privileged hardening | rv64mi + rv64si           | `feat: harden privileged mode`     |
-| 8     | Sv39 virtual memory  | custom MMU tests          | `feat: implement Sv39 MMU`         |
-| 9     | MMIO infrastructure  | mock device test          | `feat: add MMIO dispatch`          |
-| 10    | PLIC                 | PLIC unit tests           | `feat: add PLIC`                   |
-| 11    | UART NS16550A        | UART unit tests           | `feat: add NS16550A UART`          |
-| 12    | VirtIO block         | virtio unit tests         | `feat: add VirtIO block device`    |
-| 13    | SBI + Linux boot     | boot integration test     | `feat: boot Linux`                 |
+| Feature                      | Tests                     | Status  |
+|------------------------------|---------------------------|---------|
+| M extension                  | rv64um (all)              | ✓ done  |
+| C extension                  | rv64uc rvc                | ✓ done  |
+| Multi-CPU + pthreads         | custom multi-cpu tests    | ✓ done  |
+| A extension                  | rv64ua (all)              | ✓ done  |
+| F extension                  | rv64uf (all)              | ✓ done  |
+| D extension                  | rv64ud (all)              | ✓ done  |
+| Privileged hardening         | rv64mi + rv64si           |         |
+| Sv39 virtual memory          | custom MMU tests          |         |
+| MMIO infrastructure          | mock device test          |         |
+| PLIC                         | PLIC unit tests           |         |
+| UART NS16550A                | UART unit tests           |         |
+| VirtIO block                 | virtio unit tests         |         |
+| SBI + Linux boot             | boot integration test     |         |
 
 ---
 
 ## Notes & Open Questions
 
-- **Toolchain**: `riscv64-linux-gnu-` prefix is used in tests. For stages 5-6, confirm the
-  toolchain supports `rv64imafdc`.
-- **FP compliance strategy**: Stages 5-6 require exact IEEE 754 + RISC-V results. The plan
-  uses `fesetround()`/`fetestexcept()` with host `float`/`double`. On x86-64 with SSE2 this
-  is bit-exact for normal numbers; edge cases (signaling NaN propagation, FMIN/FMAX NaN rules)
-  must be handled manually as noted in those stages. If the rv64uf/ud tests reveal remaining
-  divergence, soft-float (e.g. Berkeley SoftFloat) is the fallback — but try the `fenv.h`
-  approach first to keep it simple.
+- **Toolchain**: `riscv64-linux-gnu-` prefix is used in tests.
+- **FP compliance**: Berkeley SoftFloat is used for IEEE 754 compliance (imported in F/D stages).
 - **Strict illegal-instruction enforcement**: Any opcode or funct3/funct7 combination not
   explicitly listed in the ISA must call `rv_do_iillegal()`. Audit each new implementation
   file as it is written; do not add a `default: /* ignore */` fallthrough.
@@ -407,9 +304,9 @@ build on a clean multi-CPU foundation.
   without DTS hints). Confirm in DTB which transport to advertise.
 - **Linux config**: Use a minimal `defconfig` + `CONFIG_SERIAL_8250=y`,
   `CONFIG_VIRTIO_BLK=y`, `CONFIG_RISCV_SBI_V01=y`.
-- **Multi-CPU (Stage 3)**: `rv_machine` holds `struct rv_cpu *cpus; size_t cpu_count;`.
+- **Multi-CPU**: `rv_machine` holds `struct rv_cpu *cpus; size_t cpu_count;`.
   Avoid embedding `cpu` pointers in device structs; always pass `machine` + `mhartid` index
   so devices remain correct with multiple CPUs.
-- **Atomics design (Stage 4)**: settled on a single `pthread_mutex_t atomic_lock` in
+- **Atomics design**: settled on a single `pthread_mutex_t atomic_lock` in
   `rv_machine` covering all LR/SC/AMO operations. No host intrinsics. Regular stores do not
   cancel LR reservations — acceptable for Linux workloads.
