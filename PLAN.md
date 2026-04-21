@@ -53,51 +53,63 @@ dispatch) must be structured so that the common case — a RAM hit — adds mini
 
 ---
 
-## Memory Access Layer Refactor (rv_mem)
+## ~~Memory Access Layer Refactor (rv_mem)~~ ✓ DONE
 
-**Why now:** Before adding PMP and Sv39 paging, the RAM access layer must be restructured so
-page-boundary-crossing and eventually address translation can be handled cleanly in one place.
-The current `RV_READ_RAM` / `RV_WRITE_RAM` macros perform a single pointer-cast and cannot
-split accesses that cross a page boundary (where virtual→physical translation may yield
-non-contiguous physical pages).
+Completed: `rv_mem_read/write` functions replace the old `RV_READ_RAM`/`RV_WRITE_RAM` macros.
+Page-boundary splitting is implemented. MMIO dispatch is **not** wired in yet — that happens
+in the MMIO Infrastructure stage below.
 
-### Design decisions
+---
 
-- **`cpu` parameter added now** — `rv_mem_read/write` take `struct rv_cpu *cpu` even though
-  it is currently unused (`(void)cpu`). This avoids a second refactor when Sv39 is added and
-  `cpu->csr.satp` / privilege level are needed for translation.
-- **Unsigned outputs; caller sign-extends** — functions always write to `uint8/16/32/64_t *`.
-  LB/LH/LW sign extension is done by the load instruction handlers, not the memory layer.
-- **Page boundary splitting** — any multi-byte access that straddles a page boundary is split
-  at the boundary into two independently translated sub-accesses. This is legal per the
-  RISC-V spec and correctly handles the case where the two pages map to non-contiguous physical
-  memory.
-- **`phys_read/write` internals** — raw RAM range check plus `memcpy`; returns `false` on OOB.
-  Future: will also dispatch to MMIO when address is outside RAM.
-- **Atomics are always naturally aligned** — the atomics code enforces natural alignment before
-  reaching the memory layer, so aligned 4/8-byte accesses never cross a page boundary (page
-  size 4 KiB is a multiple of 8). No special handling needed there.
+## MMIO Infrastructure
+
+**Why now:** M-mode and S-mode tests require interrupt delivery via the PLIC, which is an MMIO
+device. The MMIO dispatch layer must exist before the PLIC can be built, and both must exist
+before the privileged-mode test suite can pass.
 
 ### Tasks
+1. Define a device interface in a new `emulator/include/rv_device.h`:
+   ```c
+   typedef uint64_t (*rv_mmio_read_fn_t) (void *dev, uint64_t offset, uint8_t size);
+   typedef void     (*rv_mmio_write_fn_t)(void *dev, uint64_t offset, uint8_t size, uint64_t value);
 
-1. Write tests in `test/src/mem.c`:
-   - `mem_basic` — direct `rv_mem_read/write` round-trips for all sizes within one page.
-   - `mem_page_boundary` — uint16/32/64 writes and reads that cross the page boundary at
-     `0x2000` (machine RAM = 2 pages from `0x1000`); verify per-byte layout and read-back.
-   - `mem_oob` — accesses before RAM start, after RAM end, and straddling the end return `false`.
-2. Create `emulator/include/rv_mem.h` declaring:
-   `rv_mem_read8/16/32/64(machine, cpu, addr, out*)` and `rv_mem_write8/16/32/64(...)`.
-   Also define `RV_PAGE_SIZE 4096` here.
-3. Create `emulator/src/rv_mem.c` with static helpers `phys_read/write` and `mem_read/write`
-   (page-split logic), then the eight public functions.
-4. Add `'src/rv_mem.c'` to `emulator_src` in `emulator/meson.build`.
-5. Remove `RV_READ_RAM` / `RV_WRITE_RAM` from `emulator/include/rv_machine.h`.
-6. Update call sites:
-   - `rv_cpu.c`: two `RV_READ_RAM` → `rv_mem_read16` for instruction fetch.
-   - `rv_impl/base.c`: all load `RV_READ_RAM` (with explicit sign/zero casts) and store
-     `RV_WRITE_RAM` → typed `rv_mem_read/write`.
-   - `rv_impl/atomics.c`: LR, SC, and AMO read/write macros → `rv_mem_read/write32/64`.
-7. All existing and new tests must pass.
+   struct rv_mmio_region {
+       uint64_t           base, size;
+       void              *device;
+       rv_mmio_read_fn_t  read;
+       rv_mmio_write_fn_t write;
+   };
+   ```
+2. Add `struct rv_mmio_region *mmio; size_t mmio_count;` to `struct rv_machine`.
+3. Add `rv_machine_add_mmio(machine, region)` in `rv_machine.c`.
+4. Update `rv_mem_read()` / `rv_mem_write()`: after the RAM range check, if the address falls
+   outside RAM, scan MMIO regions and dispatch. If no region matches, generate an access fault.
+5. Write a test with a mock MMIO device that records reads/writes and verify dispatch.
+
+---
+
+## PLIC (Platform-Level Interrupt Controller)
+
+**Why now:** The privileged-mode test suite exercises external interrupt delivery. The PLIC is
+the interrupt controller Linux and the rv64si tests expect; it must be ready before those tests
+can pass.
+
+### Spec reference: RISC-V PLIC specification.
+
+### Tasks
+1. Create `emulator/src/rv_plic.c` / `emulator/include/rv_plic.h`.
+2. Implement the PLIC register map as an MMIO device (base address: `0x0C000000`, standard QEMU virt layout):
+   - Priority registers (per source): `0x0000004 * source`
+   - Pending array: `0x001000`
+   - Enable bits (per context): `0x002000 + 0x80 * context`
+   - Priority threshold + claim/complete (per context): `0x200000 + 0x1000 * context`
+3. On claim: return the highest-priority pending+enabled interrupt ID. Clear pending.
+4. On complete: mark interrupt as completable (allows re-triggering).
+5. Wire PLIC interrupt signaling to each CPU's `mip.SEIP` (external interrupt pending bit).
+   PLIC contexts map to harts: since `rv_machine` will eventually hold multiple CPUs, design
+   the PLIC to iterate `machine->cpus[i]` when raising/clearing SEIP — do not hard-code a
+   single `cpu` pointer inside the device.
+6. Write tests: register a mock interrupt source, trigger it, verify claim returns correct ID.
 
 ---
 
@@ -137,62 +149,15 @@ non-contiguous physical pages).
    - Simple direct-mapped or small fully-associative array of `(vpn, ppn, flags)` entries.
    - `SFENCE.VMA` flushes the TLB (implement in `rv_base_miscmem` or a new system handler).
    - On TLB miss: walk page table, insert entry.
-3. Replace all `RV_READ_RAM` / `RV_WRITE_RAM` call sites in the CPU with a new `rv_mem_read()` / `rv_mem_write()` inline that keeps RAM on the fast path:
-   - If `satp.MODE == 0` (bare) or privilege is M-mode: skip TLB, go directly to RAM/MMIO check.
-   - Otherwise: check TLB first (fast path on hit); on miss, walk page table, insert entry, then proceed.
-   - RAM range check comes before MMIO scan — MMIO is only reached when the address is outside RAM.
+3. Thread address translation into the existing `rv_mem_read()` / `rv_mem_write()` functions:
+   - If `satp.MODE == 0` (bare) or privilege is M-mode: skip TLB, go directly to existing RAM/MMIO dispatch.
+   - Otherwise: check TLB first (fast path on hit); on miss, walk page table, insert entry, then proceed to RAM/MMIO dispatch.
+   - MMIO dispatch is already in place from the MMIO Infrastructure stage; no changes needed there.
 4. Write custom tests (not from riscv-tests) that:
    - Set up a simple page table in RAM.
    - Enable Sv39 via `satp`.
    - Access a mapped page and verify it reads/writes correctly.
    - Access an unmapped page and verify a page fault trap is raised.
-
----
-
-## MMIO Infrastructure
-
-**Why:** Devices like PLIC, UART, and VirtIO are memory-mapped. The machine needs a way to dispatch reads/writes at specific address ranges to device callbacks.
-
-### Tasks
-1. Define a device interface in a new `emulator/include/rv_device.h`:
-   ```c
-   typedef uint64_t (*rv_mmio_read_fn_t) (void *dev, uint64_t offset, uint8_t size);
-   typedef void     (*rv_mmio_write_fn_t)(void *dev, uint64_t offset, uint8_t size, uint64_t value);
-
-   struct rv_mmio_region {
-       uint64_t          base, size;
-       void             *device;
-       rv_mmio_read_fn_t  read;
-       rv_mmio_write_fn_t write;
-   };
-   ```
-2. Add `struct rv_mmio_region *mmio; size_t mmio_count;` to `struct rv_machine`.
-3. Add `rv_machine_add_mmio(machine, region)` in `rv_machine.c`.
-4. Update `rv_mem_read()` / `rv_mem_write()` (from Sv39 stage): after address translation, if the address falls outside RAM, scan MMIO regions and dispatch. If no match, generate an access fault.
-5. Write a test with a mock MMIO device that records reads/writes and verify dispatch.
-
----
-
-## PLIC (Platform-Level Interrupt Controller)
-
-**Why:** Linux uses PLIC for all external interrupts (UART RX, disk, etc.).
-
-### Spec reference: RISC-V PLIC specification.
-
-### Tasks
-1. Create `emulator/src/rv_plic.c` / `emulator/include/rv_plic.h`.
-2. Implement the PLIC register map as an MMIO device (base address: `0x0C000000`, standard QEMU virt layout):
-   - Priority registers (per source): `0x0000004 * source`
-   - Pending array: `0x001000`
-   - Enable bits (per context): `0x002000 + 0x80 * context`
-   - Priority threshold + claim/complete (per context): `0x200000 + 0x1000 * context`
-3. On claim: return the highest-priority pending+enabled interrupt ID. Clear pending.
-4. On complete: mark interrupt as completable (allows re-triggering).
-5. Wire PLIC interrupt signaling to each CPU's `mip.SEIP` (external interrupt pending bit).
-   PLIC contexts map to harts: since `rv_machine` will eventually hold multiple CPUs, design
-   the PLIC to iterate `machine->cpus[i]` when raising/clearing SEIP — do not hard-code a
-   single `cpu` pointer inside the device.
-6. Write tests: register a mock interrupt source, trigger it, verify claim returns correct ID.
 
 ---
 
@@ -280,10 +245,11 @@ non-contiguous physical pages).
 | A extension                  | rv64ua (all)              | ✓ done  |
 | F extension                  | rv64uf (all)              | ✓ done  |
 | D extension                  | rv64ud (all)              | ✓ done  |
-| Privileged hardening         | rv64mi + rv64si           |         |
-| Sv39 virtual memory          | custom MMU tests          |         |
+| Memory access refactor       | mem unit tests            | ✓ done  |
 | MMIO infrastructure          | mock device test          |         |
 | PLIC                         | PLIC unit tests           |         |
+| Privileged hardening         | rv64mi + rv64si           |         |
+| Sv39 virtual memory          | custom MMU tests          |         |
 | UART NS16550A                | UART unit tests           |         |
 | VirtIO block                 | virtio unit tests         |         |
 | SBI + Linux boot             | boot integration test     |         |
