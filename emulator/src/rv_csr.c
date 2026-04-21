@@ -79,7 +79,20 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
             *rdata = (cpu->csr.fcsr >> RV_FCSR_FRM_BASE_BIT) & RV_FRM_MASK;
             break;
 
-        default: return false;
+        default:
+            // Check for array CSRs.
+            if (index >= RV_CSR_pmpcfg0 && index <= RV_CSR_pmpcfg15) {
+                // Odd pmpcfg indices are illegal in RV64.
+                if (index & 1)
+                    return false;
+                *rdata = cpu->csr.pmpcfg.packed[(index - RV_CSR_pmpcfg0) / 2];
+            } else if (index >= RV_CSR_pmpaddr0 && index <= RV_CSR_pmpaddr63) {
+                *rdata = cpu->csr.pmpaddr[index - RV_CSR_pmpaddr0];
+            } else {
+                // No matches.
+                return false;
+            }
+            break;
     }
 
     return true;
@@ -152,7 +165,46 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
             cpu->csr.fcsr |= (wdata & RV_FRM_MASK) << RV_FCSR_FRM_BASE_BIT;
             break;
 
-        default: return false;
+        default:
+            // Check for array CSRs.
+            if (index >= RV_CSR_pmpcfg0 && index <= 0x3AF) {
+                // Odd pmpcfg indices are illegal in RV64.
+                if (index & 1)
+                    return false;
+                int      packed_idx = (index - RV_CSR_pmpcfg0) / 2;
+                uint64_t old        = cpu->csr.pmpcfg.packed[packed_idx];
+                uint64_t result     = 0;
+                for (int b = 0; b < 8; b++) {
+                    uint8_t old_byte = (old >> (b * 8)) & 0xFF;
+                    uint8_t new_byte = (wdata >> (b * 8)) & RV_PMPCFG_BYTE_MASK;
+                    // Locked bytes are not modified.
+                    result |=
+                        (uint64_t)(old_byte & (1 << RV_PMPCFG_L_BIT) ? old_byte
+                                                                     : new_byte)
+                        << (b * 8);
+                }
+                cpu->csr.pmpcfg.packed[packed_idx] = result;
+            } else if (index >= RV_CSR_pmpaddr0 && index <= 0x3EF) {
+                int     addr_idx = index - RV_CSR_pmpaddr0;
+                uint8_t cfg      = cpu->csr.pmpcfg.unpacked[addr_idx];
+                // Entry is locked: write silently ignored.
+                if (cfg & (1 << RV_PMPCFG_L_BIT))
+                    break;
+                // Next entry is TOR-locked: also locks this pmpaddr.
+                if (addr_idx < 63) {
+                    uint8_t next = cpu->csr.pmpcfg.unpacked[addr_idx + 1];
+                    if ((next & (1 << RV_PMPCFG_L_BIT)) &&
+                        ((next >> RV_PMPCFG_A_BASE_BIT) & 3) ==
+                            RV_PMP_ADDR_MATCH_TOR) {
+                        break;
+                    }
+                }
+                cpu->csr.pmpaddr[addr_idx] = wdata;
+            } else {
+                // No matches.
+                return false;
+            }
+            break;
     }
 
     return true;

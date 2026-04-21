@@ -121,6 +121,20 @@ enum rv_xstate {
 // Implemented bits in `fcsr`.
 #define RV_FCSR_MASK   (RV_FRM_MASK << RV_FCSR_FRM_BASE_BIT | RV_FFLAGS_MASK)
 
+// PMP configuration byte bit fields.
+#define RV_PMPCFG_R_BIT         0  // Read permission.
+#define RV_PMPCFG_W_BIT         1  // Write permission.
+#define RV_PMPCFG_X_BIT         2  // Execute permission.
+#define RV_PMPCFG_A_BASE_BIT    3  // Address matching mode (2 bits).
+#define RV_PMPCFG_L_BIT         7  // Locked.
+// Address matching modes (stored in pmpcfg bits [4:3]).
+#define RV_PMP_ADDR_MATCH_OFF   0
+#define RV_PMP_ADDR_MATCH_TOR   1
+#define RV_PMP_ADDR_MATCH_NA4   2
+#define RV_PMP_ADDR_MATCH_NAPOT 3
+// Valid bits in a pmpcfg byte; reserved bits [6:5] are hardwired to 0.
+#define RV_PMPCFG_BYTE_MASK     0x9F
+
 // Get the name of a CSR; returns `nullptr` if invalid.
 [[gnu::const]] char const *rv_csr_to_name(enum rv_csr csr);
 // Get a CSR by name; returns 0 if not found.

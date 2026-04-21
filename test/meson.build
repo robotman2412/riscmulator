@@ -7,6 +7,7 @@ test_src = files(
     'src/mem.c',
     'src/multicpu.c',
     'src/op.c',
+    'src/pmp.c',
     'src/riscv_tests.c',
     'src/softfloat.c',
     'src/trap.c',
