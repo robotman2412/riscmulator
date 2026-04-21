@@ -1,6 +1,6 @@
 All work in this project MUST have test cases. WOrk in TDD mode always. Before commit all tests MUST succeed. This is critical.
 
-Always work in stages. COmmit. then create a new plan a clean context.
+Always work in stages. Commit. then create a new plan a clean context.
 
 Project goal:
 
@@ -31,3 +31,4 @@ Common commands:
 When I say commit, add/stage the files you just worked on and write a nice commit message with decent detail.
 Before commit give me a summary of the most critical bits of the commit. 
 
+A copy of important RISC-V specification documents can be found in ~/Sync/datasheets/ISAs/RISC-V/
