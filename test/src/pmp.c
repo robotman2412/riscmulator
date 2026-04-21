@@ -64,23 +64,23 @@ TESTCASE(pmp_pmpaddr_basic, {
     (void)machine;
     uint64_t val;
 
-    // Default A=OFF: bits [G-2:0] of readback are forced to 0.
+    // Default A=OFF: bits [G-1:0] of readback are forced to 0.
     TEST_ASSERT(csr_write(cpu, 0x3B0, 0xDEADBEEFCAFEBABEULL)) // pmpaddr0
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_OFF_MASK))
 
     TEST_ASSERT(csr_write(cpu, 0x3B5, 0x1234567890ABCDEFULL)) // pmpaddr5
     TEST_ASSERT(csr_read(cpu, 0x3B5, &val))
-    TEST_ASSERT(val == (0x1234567890ABCDEFULL & ~RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0x1234567890ABCDEFULL & ~RV_PMPGRAIN_OFF_MASK))
 
     // pmpaddr0 should be unaffected.
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_OFF_MASK))
 
     // Last pmpaddr63 (0x3EF).
     TEST_ASSERT(csr_write(cpu, 0x3EF, 0xAAAAAAAAAAAAAAAAULL))
     TEST_ASSERT(csr_read(cpu, 0x3EF, &val))
-    TEST_ASSERT(val == (0xAAAAAAAAAAAAAAAAULL & ~RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0xAAAAAAAAAAAAAAAAULL & ~RV_PMPGRAIN_OFF_MASK))
 })
 
 // Locked pmpcfg byte: the locked byte must not change on write.
@@ -133,7 +133,7 @@ TESTCASE(pmp_cfg_a_normalization, {
     TEST_ASSERT((val & 0xFF) == 0x19)
 })
 
-// Grain masking: pmpaddr bits [G-2:0] are forced to 0 in OFF mode, 1 in NAPOT mode.
+// Grain masking: pmpaddr bits [G-1:0] are forced to 0 in OFF mode; bits [G-2:0] forced to 1 in NAPOT mode.
 TESTCASE(pmp_pmpaddr_grain_mask, {
     (void)machine;
     uint64_t val;
@@ -141,12 +141,12 @@ TESTCASE(pmp_pmpaddr_grain_mask, {
     // Write a value with all low bits set; in OFF mode (default) they read as 0.
     TEST_ASSERT(csr_write(cpu, 0x3B0, 0xDEADBEEFFFFFFFFFULL))
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL & ~RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL & ~RV_PMPGRAIN_OFF_MASK))
 
-    // Switch entry 0 to NAPOT; low bits now read as 1.
+    // Switch entry 0 to NAPOT; low bits [G-2:0] now read as 1; G-1 bit reads from stored value.
     TEST_ASSERT(csr_write(cpu, 0x3A0, (uint64_t)RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT))
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL | RV_PMPGRAIN_ADDR_MASK))
+    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL | RV_PMPGRAIN_NAPOT_MASK))
 })
 
 // Helper: set a single locked NAPOT entry (entry 0) with given permissions and address.

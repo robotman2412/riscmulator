@@ -149,8 +149,10 @@ enum rv_xstate {
 #define RV_PMP_ADDR_MATCH_NAPOT 3
 // Valid bits in a pmpcfg byte; reserved bits [6:5] are hardwired to 0.
 #define RV_PMPCFG_BYTE_MASK     0x9F
-// pmpaddr bits [G-2:0] are hardwired: 0 in OFF mode, 1 in NAPOT mode.
-#define RV_PMPGRAIN_ADDR_MASK   ((1ULL << (RV_PMPGRAIN - 1)) - 1)
+// In NAPOT mode, pmpaddr bits [G-2:0] read as all-ones.
+#define RV_PMPGRAIN_NAPOT_MASK  ((1ULL << (RV_PMPGRAIN - 1)) - 1)
+// In OFF/TOR mode, pmpaddr bits [G-1:0] read as all-zeros (one more bit than NAPOT).
+#define RV_PMPGRAIN_OFF_MASK    ((1ULL << RV_PMPGRAIN) - 1)
 
 // Get the name of a CSR; returns `nullptr` if invalid.
 [[gnu::const]] char const *rv_csr_to_name(enum rv_csr csr);

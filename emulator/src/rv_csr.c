@@ -96,10 +96,10 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
                              RV_PMPCFG_A_BASE_BIT) &
                             3;
                 if (a == RV_PMP_ADDR_MATCH_NAPOT) {
-                    *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_ADDR_MASK;
+                    *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_NAPOT_MASK;
                 } else {
                     *rdata =
-                        cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_ADDR_MASK;
+                        cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_OFF_MASK;
                 }
             } else {
                 // No matches.

@@ -48,6 +48,7 @@ bool rv_machine_init(
 
     for (size_t i = 0; i < cpu_count; i++) {
         cpus[i].csr.mhartid = i;
+        cpus[i].privilege   = 3; // CPUs reset into M-mode per RISC-V spec.
     }
 
     machine->cpus         = cpus;
