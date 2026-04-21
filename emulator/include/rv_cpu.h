@@ -9,9 +9,13 @@
 
 #include <inttypes.h>
 #include <stdint.h>
-#include <stdio.h>
 
 struct rv_machine;
+
+// Log-base 2 of page size.
+#define RV_CPU_PAGE_SIZE_EXP 12
+// Page size in bytes.
+#define RV_CPU_PAGE_SIZE     (1 << RV_CPU_PAGE_SIZE_EXP)
 
 // TODO: Assuming here the host is little-endian;
 // alternative C23-compliant way to bit-cast for big-endian hosts?

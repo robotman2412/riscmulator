@@ -3,9 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "rv_machine.h"
-#include "rv_cpu.h"
 
+#include "rv_cpu.h"
+#include "rv_privileged.h"
+
+#include <stdint.h>
 #include <stdlib.h>
+
+#include <assert.h>
 #include <string.h>
 
 struct cpu_thread_arg {
@@ -27,9 +32,10 @@ bool rv_machine_init(
     uint64_t           ram_start,
     size_t             ram_size
 ) {
-    struct rv_cpu         *cpus  = calloc(cpu_count, sizeof(struct rv_cpu));
-    struct rv_reservation *resv  = calloc(cpu_count, sizeof(struct rv_reservation));
-    uint8_t               *ram   = calloc(1, ram_size);
+    struct rv_cpu         *cpus = calloc(cpu_count, sizeof(struct rv_cpu));
+    struct rv_reservation *resv =
+        calloc(cpu_count, sizeof(struct rv_reservation));
+    uint8_t *ram = calloc(1, ram_size);
 
     if (!cpus || !resv || !ram) {
         free(cpus);
@@ -53,8 +59,9 @@ bool rv_machine_init(
 }
 
 void rv_machine_run(struct rv_machine *machine) {
-    pthread_t             *threads = malloc(machine->cpu_count * sizeof(pthread_t));
-    struct cpu_thread_arg *args    = malloc(machine->cpu_count * sizeof(struct cpu_thread_arg));
+    pthread_t *threads = malloc(machine->cpu_count * sizeof(pthread_t));
+    struct cpu_thread_arg *args =
+        malloc(machine->cpu_count * sizeof(struct cpu_thread_arg));
 
     for (size_t i = 0; i < machine->cpu_count; i++) {
         args[i].machine = machine;
@@ -81,4 +88,129 @@ void rv_machine_destroy(struct rv_machine *machine) {
     machine->cpu_count    = 0;
     machine->ram_start    = 0;
     machine->ram_end      = 0;
+}
+
+// Implementation of misaligned accesses.
+static bool misaligned_access(
+    struct rv_machine *machine,
+    struct rv_cpu     *cpu,
+    uint64_t           addr,
+    uint64_t          *data,
+    size_t             size,
+    enum rv_access     mode
+) {
+    // Loop (partial) accesses until done.
+    while (size) {
+        if (addr >= machine->ram_start && addr + 1 <= machine->ram_end) {
+            // Partial RAM access.
+            uint64_t part = size;
+            if (addr + part > machine->ram_end) {
+                part = machine->ram_end - addr;
+            }
+
+            void *ptr = machine->ram + addr - machine->ram_start;
+            if (data && mode == RV_ACCESS_STORE) {
+                memcpy(data, ptr, part);
+            } else if (data) {
+                memcpy(ptr, data, part);
+            }
+            addr += part;
+            size -= part;
+
+        } else { // TODO: Partial MMIO access.
+            // Invalid access.
+            enum rv_cause cause;
+            switch (mode) {
+                case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
+                case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+                case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
+            }
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = cause,
+                    .epc   = cpu->epc,
+                    .tval  = addr,
+                }
+            );
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Partial access to physical memory (e.g. spanning virtual page boundary).
+bool rv_access_phys_partial(
+    struct rv_machine *machine,
+    struct rv_cpu     *cpu,
+    uint64_t           addr,
+    void              *data,
+    size_t             size,
+    enum rv_access     mode
+) {
+    // The first checks the access permissions,
+    // the second actually commits to the access.
+    return misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
+           misaligned_access(machine, cpu, addr, data, size, mode);
+}
+
+// Access physical memory, optimizing for aligned access.
+bool rv_access_phys(
+    struct rv_machine *machine,
+    struct rv_cpu     *cpu,
+    uint64_t           addr,
+    void              *data,
+    uint8_t            size_exp,
+    enum rv_access     mode
+) {
+    uint64_t size = UINT64_C(1) << size_exp;
+
+    // Aligned RAM access fast path.
+    if (addr >= machine->ram_start && addr + size <= machine->ram_end) {
+        void *ptr = machine->ram + addr - machine->ram_start;
+        if (mode == RV_ACCESS_STORE) {
+            switch (size_exp) {
+                case 0: *(uint8_t *)ptr = *(uint8_t *)data; break;
+                case 1: *(uint16_t *)ptr = *(uint16_t *)data; break;
+                case 2: *(uint32_t *)ptr = *(uint32_t *)data; break;
+                case 3: *(uint64_t *)ptr = *(uint64_t *)data; break;
+            }
+        } else {
+            switch (size_exp) {
+                case 0: *(uint8_t *)data = *(uint8_t *)ptr; break;
+                case 1: *(uint16_t *)data = *(uint16_t *)ptr; break;
+                case 2: *(uint32_t *)data = *(uint32_t *)ptr; break;
+                case 3: *(uint64_t *)data = *(uint64_t *)ptr; break;
+            }
+        }
+        return true;
+    }
+
+    // Break up into aligned accesses if needed.
+    if (addr % size) {
+        // The first checks the access permissions,
+        // the second actually commits to the access.
+        return misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
+               misaligned_access(machine, cpu, addr, data, size, mode);
+    }
+
+    // Invalid access.
+    enum rv_cause cause;
+    switch (mode) {
+        case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
+        case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+        case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
+    }
+    rv_do_trap(
+        machine,
+        cpu,
+        (struct rv_trap){
+            .epc   = cpu->epc,
+            .tval  = addr,
+            .cause = cause,
+        }
+    );
+    return false;
 }
