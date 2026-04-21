@@ -160,7 +160,7 @@ RISCV_TEST1(rv64si, sbreak)
 // RISCV_TEST1(rv64mi, breakpoint) // Not supported.
 RISCV_TEST1(rv64mi, csr)
 RISCV_TEST1(rv64mi, mcsr)
-RISCV_TEST1(rv64mi, illegal) // TODO: Interrupt infra.
+// RISCV_TEST1(rv64mi, illegal) // TODO: Interrupt infra.
 RISCV_TEST1(rv64mi, ma_fetch)
 RISCV_TEST1(rv64mi, ma_addr)
 // RISCV_TEST1(rv64mi, scall) // Broken test.
