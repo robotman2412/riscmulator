@@ -23,18 +23,18 @@ TESTCASE(pmp_pmpcfg_basic, {
     (void)machine;
     uint64_t val;
 
-    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x0F0F0F0F0F0F0F0FULL))
+    // 0x1F = L=0, A=NAPOT, RWX=all.
+    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x1F1F1F1F1F1F1F1FULL))
     TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
-    TEST_ASSERT(val == 0x0F0F0F0F0F0F0F0FULL)
+    TEST_ASSERT(val == 0x1F1F1F1F1F1F1F1FULL)
 
-    // pmpcfg2 (0x3A2) maps to packed word 1.
-    // Use a value with no reserved bits [6:5] set in any byte (all survive & 0x9F).
-    TEST_ASSERT(csr_write(cpu, 0x3A2, 0x0102030405060708ULL))
+    // pmpcfg2 (0x3A2) maps to packed word 1. 0x07 = L=0, A=OFF, RWX=all.
+    TEST_ASSERT(csr_write(cpu, 0x3A2, 0x0707070707070707ULL))
     TEST_ASSERT(csr_read(cpu, 0x3A2, &val))
-    TEST_ASSERT(val == 0x0102030405060708ULL)
+    TEST_ASSERT(val == 0x0707070707070707ULL)
     // pmpcfg0 should be unaffected.
     TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
-    TEST_ASSERT(val == 0x0F0F0F0F0F0F0F0FULL)
+    TEST_ASSERT(val == 0x1F1F1F1F1F1F1F1FULL)
 })
 
 // Reserved bits [6:5] in each pmpcfg byte must be hardwired to 0.
@@ -63,22 +63,23 @@ TESTCASE(pmp_pmpaddr_basic, {
     (void)machine;
     uint64_t val;
 
+    // Default A=OFF: bits [G-2:0] of readback are forced to 0.
     TEST_ASSERT(csr_write(cpu, 0x3B0, 0xDEADBEEFCAFEBABEULL)) // pmpaddr0
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == 0xDEADBEEFCAFEBABEULL)
+    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_ADDR_MASK))
 
     TEST_ASSERT(csr_write(cpu, 0x3B5, 0x1234567890ABCDEFULL)) // pmpaddr5
     TEST_ASSERT(csr_read(cpu, 0x3B5, &val))
-    TEST_ASSERT(val == 0x1234567890ABCDEFULL)
+    TEST_ASSERT(val == (0x1234567890ABCDEFULL & ~RV_PMPGRAIN_ADDR_MASK))
 
     // pmpaddr0 should be unaffected.
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
-    TEST_ASSERT(val == 0xDEADBEEFCAFEBABEULL)
+    TEST_ASSERT(val == (0xDEADBEEFCAFEBABEULL & ~RV_PMPGRAIN_ADDR_MASK))
 
     // Last pmpaddr63 (0x3EF).
     TEST_ASSERT(csr_write(cpu, 0x3EF, 0xAAAAAAAAAAAAAAAAULL))
     TEST_ASSERT(csr_read(cpu, 0x3EF, &val))
-    TEST_ASSERT(val == 0xAAAAAAAAAAAAAAAAULL)
+    TEST_ASSERT(val == (0xAAAAAAAAAAAAAAAAULL & ~RV_PMPGRAIN_ADDR_MASK))
 })
 
 // Locked pmpcfg byte: the locked byte must not change on write.
@@ -86,16 +87,16 @@ TESTCASE(pmp_pmpcfg_lock, {
     (void)machine;
     uint64_t val;
 
-    // Write pmpcfg0 with byte0=0x8F (L=1, RWX, OFF mode) and byte1=0x07 (unlocked).
-    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x000000000000078FULL))
+    // byte0=0x9F (L=1, A=NAPOT, RWX=all), byte1=0x07 (unlocked, A=OFF, RWX=all).
+    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x000000000000079FULL))
     TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
-    TEST_ASSERT(val == 0x000000000000078FULL)
+    TEST_ASSERT(val == 0x000000000000079FULL)
 
     // Attempt to overwrite both bytes; only byte1 should change.
-    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x0000000000001100ULL))
+    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x0000000000001F00ULL))
     TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
-    // byte0 stays 0x8F (locked), byte1 becomes 0x11 & 0x9F = 0x11.
-    TEST_ASSERT(val == 0x000000000000118FULL)
+    // byte0 stays 0x9F (locked), byte1 becomes 0x1F (A=NAPOT, RWX=all).
+    TEST_ASSERT(val == 0x0000000000001F9FULL)
 })
 
 // Locked pmpaddr: write to pmpaddr[i] is ignored when pmpcfg[i].L=1.
@@ -103,33 +104,48 @@ TESTCASE(pmp_pmpaddr_lock_direct, {
     (void)machine;
     uint64_t val;
 
-    // Set pmpaddr1 to a known value.
-    TEST_ASSERT(csr_write(cpu, 0x3B1, 0x1111111111111111ULL))
-    // Lock pmpcfg entry 1 (byte 1 of pmpcfg0): L=1.
+    // Use a grain-aligned value so the readback is predictable under OFF mode.
+    TEST_ASSERT(csr_write(cpu, 0x3B1, 0x1111111111111000ULL))
+    // Lock pmpcfg entry 1 (byte 1 of pmpcfg0): L=1, A=OFF → 0x80.
     TEST_ASSERT(csr_write(cpu, 0x3A0, 0x0000000000008000ULL))
 
     // Attempt overwrite of pmpaddr1; must be silently ignored.
     TEST_ASSERT(csr_write(cpu, 0x3B1, 0xFFFFFFFFFFFFFFFFULL))
     TEST_ASSERT(csr_read(cpu, 0x3B1, &val))
-    TEST_ASSERT(val == 0x1111111111111111ULL)
+    // In OFF mode the bottom bits read as 0; value was grain-aligned so no change.
+    TEST_ASSERT(val == 0x1111111111111000ULL)
 })
 
-// TOR-locked next entry also locks the preceding pmpaddr.
-TESTCASE(pmp_pmpaddr_lock_tor, {
+// TOR (A=0b01) is normalized to OFF; NA4 (A=0b10) is normalized to NAPOT.
+TESTCASE(pmp_cfg_a_normalization, {
     (void)machine;
     uint64_t val;
 
-    // Set pmpaddr2 to known value.
-    TEST_ASSERT(csr_write(cpu, 0x3B2, 0x2222222222222222ULL))
+    // 0x09 = A=TOR, R=1 → stored/read as 0x01 (A=OFF, R=1).
+    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x09ULL))
+    TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
+    TEST_ASSERT((val & 0xFF) == 0x01)
 
-    // Lock pmpcfg entry 3 (byte 3 of pmpcfg0) with L=1 and A=TOR (0b01 << 3).
-    // Byte 3 = L|A=TOR = 0x80 | 0x08 = 0x88; mask to 0x9F → 0x88.
-    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x0000000088000000ULL))
+    // 0x11 = A=NA4, R=1 → stored/read as 0x19 (A=NAPOT, R=1).
+    TEST_ASSERT(csr_write(cpu, 0x3A0, 0x11ULL))
+    TEST_ASSERT(csr_read(cpu, 0x3A0, &val))
+    TEST_ASSERT((val & 0xFF) == 0x19)
+})
 
-    // pmpaddr2 (addr_idx=2, next entry 3 is TOR-locked) must be locked.
-    TEST_ASSERT(csr_write(cpu, 0x3B2, 0xFFFFFFFFFFFFFFFFULL))
-    TEST_ASSERT(csr_read(cpu, 0x3B2, &val))
-    TEST_ASSERT(val == 0x2222222222222222ULL)
+// Grain masking: pmpaddr bits [G-2:0] are forced to 0 in OFF mode, 1 in NAPOT mode.
+TESTCASE(pmp_pmpaddr_grain_mask, {
+    (void)machine;
+    uint64_t val;
+
+    // Write a value with all low bits set; in OFF mode (default) they read as 0.
+    TEST_ASSERT(csr_write(cpu, 0x3B0, 0xDEADBEEFFFFFFFFFULL))
+    TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
+    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL & ~RV_PMPGRAIN_ADDR_MASK))
+
+    // Switch entry 0 to NAPOT; low bits now read as 1.
+    TEST_ASSERT(csr_write(cpu, 0x3A0, (uint64_t)RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT))
+    TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
+    TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL | RV_PMPGRAIN_ADDR_MASK))
 })
 
 // Privilege check: S-mode (privilege=1) cannot access M-mode PMP CSRs (bits[9:8]=3).

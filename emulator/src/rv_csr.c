@@ -87,7 +87,13 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
                     return false;
                 *rdata = cpu->csr.pmpcfg.packed[(index - RV_CSR_pmpcfg0) / 2];
             } else if (index >= RV_CSR_pmpaddr0 && index <= RV_CSR_pmpaddr63) {
-                *rdata = cpu->csr.pmpaddr[index - RV_CSR_pmpaddr0];
+                int     addr_idx = index - RV_CSR_pmpaddr0;
+                uint8_t a        = (cpu->csr.pmpcfg.unpacked[addr_idx] >> RV_PMPCFG_A_BASE_BIT) & 3;
+                if (a == RV_PMP_ADDR_MATCH_NAPOT) {
+                    *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_ADDR_MASK;
+                } else {
+                    *rdata = cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_ADDR_MASK;
+                }
             } else {
                 // No matches.
                 return false;
@@ -177,6 +183,11 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                 for (int b = 0; b < 8; b++) {
                     uint8_t old_byte = (old >> (b * 8)) & 0xFF;
                     uint8_t new_byte = (wdata >> (b * 8)) & RV_PMPCFG_BYTE_MASK;
+                    // Normalize A: only OFF (0b00) and NAPOT (0b11) are supported.
+                    // TOR (0b01) → OFF; NA4 (0b10) → NAPOT (grain ≥ 4 makes NA4 unselectable).
+                    uint8_t a = (new_byte >> RV_PMPCFG_A_BASE_BIT) & 3;
+                    new_byte  = (new_byte & (uint8_t) ~(3 << RV_PMPCFG_A_BASE_BIT)) |
+                                (uint8_t)((a & 2 ? 3 : 0) << RV_PMPCFG_A_BASE_BIT);
                     // Locked bytes are not modified.
                     result |=
                         (uint64_t)(old_byte & (1 << RV_PMPCFG_L_BIT) ? old_byte
@@ -190,15 +201,6 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                 // Entry is locked: write silently ignored.
                 if (cfg & (1 << RV_PMPCFG_L_BIT))
                     break;
-                // Next entry is TOR-locked: also locks this pmpaddr.
-                if (addr_idx < 63) {
-                    uint8_t next = cpu->csr.pmpcfg.unpacked[addr_idx + 1];
-                    if ((next & (1 << RV_PMPCFG_L_BIT)) &&
-                        ((next >> RV_PMPCFG_A_BASE_BIT) & 3) ==
-                            RV_PMP_ADDR_MATCH_TOR) {
-                        break;
-                    }
-                }
                 cpu->csr.pmpaddr[addr_idx] = wdata;
             } else {
                 // No matches.
