@@ -15,6 +15,6 @@ uint8_t rv_pmp_check(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           paddr,
-    uint8_t            size_exp,
+    uint64_t           size,
     bool               m_mode
 );

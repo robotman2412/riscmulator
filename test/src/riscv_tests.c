@@ -14,6 +14,7 @@
 #include <linux/limits.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 static bool do_riscv_test(
@@ -156,14 +157,13 @@ RISCV_TEST1(rv64si, wfi)
 RISCV_TEST1(rv64si, sbreak)
 */
 
-/*
-RISCV_TEST1(rv64mi, breakpoint)
+// RISCV_TEST1(rv64mi, breakpoint) // Not supported.
 RISCV_TEST1(rv64mi, csr)
 RISCV_TEST1(rv64mi, mcsr)
-RISCV_TEST1(rv64mi, illegal)
+RISCV_TEST1(rv64mi, illegal) // TODO: Interrupt infra.
 RISCV_TEST1(rv64mi, ma_fetch)
 RISCV_TEST1(rv64mi, ma_addr)
-RISCV_TEST1(rv64mi, scall)
+// RISCV_TEST1(rv64mi, scall) // Broken test.
 RISCV_TEST1(rv64mi, sbreak)
 RISCV_TEST2(rv64mi, "rv64mi", ld_misaligned, "ld-misaligned")
 RISCV_TEST2(rv64mi, "rv64mi", lw_misaligned, "lw-misaligned")
@@ -171,10 +171,9 @@ RISCV_TEST2(rv64mi, "rv64mi", lh_misaligned, "lh-misaligned")
 RISCV_TEST2(rv64mi, "rv64mi", sh_misaligned, "sh-misaligned")
 RISCV_TEST2(rv64mi, "rv64mi", sw_misaligned, "sw-misaligned")
 RISCV_TEST2(rv64mi, "rv64mi", sd_misaligned, "sd-misaligned")
-RISCV_TEST1(rv64mi, zicntr)
-RISCV_TEST1(rv64mi, instret_overflow)
+// RISCV_TEST1(rv64mi, zicntr) // Not supported.
+// RISCV_TEST1(rv64mi, instret_overflow) // Not supported.
 RISCV_TEST1(rv64mi, pmpaddr)
-*/
 
 static bool compile_step(char *const *argv) {
     pid_t pid = fork();
@@ -294,6 +293,21 @@ struct riscv_test_state {
     uint64_t trap_count;
 };
 
+static void dump_vm_state(struct rv_machine *machine, struct rv_cpu *cpu) {
+    (void)machine;
+    for (int i = 1; i < 32; i++) {
+        printf(
+            "  x%-2d:      %" PRIx64 " (%" PRId64 ")\n",
+            i,
+            cpu->xregs[i],
+            cpu->xregs[i]
+        );
+    }
+    printf("  mstatus:  %" PRIx64 "\n", cpu->csr.mstatus);
+    printf("  mscratch: %" PRIx64 "\n", cpu->csr.mscratch);
+    printf("  fcsr:     %" PRIx64 "\n", cpu->csr.fcsr);
+}
+
 static bool trap_hook(
     void              *cookie,
     struct rv_machine *machine,
@@ -332,8 +346,6 @@ static bool trap_hook(
 vmfail:
     st->failure  = true;
     st->finished = true;
-    printf("  mstatus: %" PRIx64 "\n", cpu->csr.mstatus);
-    printf("  fcsr:    %" PRIx64 "\n", cpu->csr.fcsr);
     printf("\033[0m");
     return false;
 }
@@ -387,6 +399,7 @@ static bool do_riscv_test(
     cpu->privilege = 3;
     cpu->pc        = 0x10000;
 
+    uint64_t cyc = 0;
     while (!st.finished) {
         rv_step_insn(machine, cpu);
         if ((cpu->xregs[3] & 1337) == 1337) {
@@ -399,9 +412,21 @@ static bool do_riscv_test(
             st.failure  = true;
             st.finished = true;
         }
+        if (cyc >= 10000000) {
+            printf("\033[31m VM timed out, PC 0x%" PRIx64 "\033[0m\n", cpu->pc);
+            st.failure  = true;
+            st.finished = true;
+        }
+        cyc++;
     }
 
     machine->hook_cookie = nullptr;
+
+    if (st.failure) {
+        printf("\033[34m");
+        dump_vm_state(machine, cpu);
+        printf("\033[0m");
+    }
 
     return !st.failure;
 }

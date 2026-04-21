@@ -5,6 +5,8 @@
 #include "rv_machine.h"
 
 #include "rv_cpu.h"
+#include "rv_csr.h"
+#include "rv_pmp.h"
 #include "rv_privileged.h"
 
 #include <stdint.h>
@@ -142,6 +144,48 @@ static bool misaligned_access(
     return true;
 }
 
+static inline bool do_pmp_check(
+    struct rv_machine *machine,
+    struct rv_cpu     *cpu,
+    uint64_t           addr,
+    size_t             size,
+    enum rv_access     mode
+) {
+    uint8_t perm = rv_pmp_check(machine, cpu, addr, size, cpu->privilege == 3);
+
+    bool          ok;
+    enum rv_cause cause;
+    switch (mode) {
+        case RV_ACCESS_INSN:
+            cause = RV_CAUSE_IACCESS;
+            ok    = perm & (1 << RV_PMPCFG_X_BIT);
+            break;
+        case RV_ACCESS_LOAD:
+            cause = RV_CAUSE_LACCESS;
+            ok    = perm & (1 << RV_PMPCFG_R_BIT);
+            break;
+        case RV_ACCESS_AMO:
+        case RV_ACCESS_STORE:
+            cause = RV_CAUSE_SACCESS;
+            ok    = perm & (1 << RV_PMPCFG_W_BIT);
+            break;
+    }
+    if (!ok) {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .cause = cause,
+                .epc   = cpu->epc,
+                .tval  = addr,
+            }
+        );
+        return false;
+    }
+
+    return true;
+}
+
 // Partial access to physical memory (e.g. spanning virtual page boundary).
 bool rv_access_phys_partial(
     struct rv_machine *machine,
@@ -151,9 +195,10 @@ bool rv_access_phys_partial(
     size_t             size,
     enum rv_access     mode
 ) {
-    // The first checks the access permissions,
-    // the second actually commits to the access.
-    return misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
+    return do_pmp_check(machine, cpu, addr, size, mode) &&
+           // The first checks the access permissions,
+           misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
+           // the second actually commits to the access.
            misaligned_access(machine, cpu, addr, data, size, mode);
 }
 
@@ -167,6 +212,10 @@ bool rv_access_phys(
     enum rv_access     mode
 ) {
     uint64_t size = UINT64_C(1) << size_exp;
+
+    if (!do_pmp_check(machine, cpu, addr, size, mode)) {
+        return false;
+    }
 
     // Aligned RAM access fast path.
     if (addr >= machine->ram_start && addr + size <= machine->ram_end) {

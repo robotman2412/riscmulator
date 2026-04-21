@@ -35,10 +35,14 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
     }
 
     switch (index) {
+        case RV_CSR_misa: *rdata = RV_MISA_VALUE; break;
         case RV_CSR_mhartid: *rdata = cpu->csr.mhartid; break;
         case RV_CSR_marchid: *rdata = cpu->csr.marchid; break;
+        case RV_CSR_mvendorid: *rdata = cpu->csr.mvendorid; break;
         case RV_CSR_mimpid: *rdata = cpu->csr.mimpid; break;
-        case RV_CSR_mstatus: *rdata = cpu->csr.mstatus; break;
+        case RV_CSR_mstatus:
+            *rdata = cpu->csr.mstatus | RV_MSTATUS_HARDWIRED;
+            break;
         case RV_CSR_mie: *rdata = cpu->csr.mie; break;
         case RV_CSR_mip: *rdata = cpu->csr.mip; break;
         case RV_CSR_mideleg: *rdata = cpu->csr.mideleg; break;
@@ -88,11 +92,14 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
                 *rdata = cpu->csr.pmpcfg.packed[(index - RV_CSR_pmpcfg0) / 2];
             } else if (index >= RV_CSR_pmpaddr0 && index <= RV_CSR_pmpaddr63) {
                 int     addr_idx = index - RV_CSR_pmpaddr0;
-                uint8_t a        = (cpu->csr.pmpcfg.unpacked[addr_idx] >> RV_PMPCFG_A_BASE_BIT) & 3;
+                uint8_t a        = (cpu->csr.pmpcfg.unpacked[addr_idx] >>
+                             RV_PMPCFG_A_BASE_BIT) &
+                            3;
                 if (a == RV_PMP_ADDR_MATCH_NAPOT) {
                     *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_ADDR_MASK;
                 } else {
-                    *rdata = cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_ADDR_MASK;
+                    *rdata =
+                        cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_ADDR_MASK;
                 }
             } else {
                 // No matches.
@@ -113,9 +120,11 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
     }
 
     switch (index) {
+        case RV_CSR_misa:
         case RV_CSR_mhartid:
         case RV_CSR_marchid:
-        case RV_CSR_mimpid: break; // Writes ignored.
+        case RV_CSR_mimpid:
+        case RV_CSR_mvendorid: break; // Writes ignored.
         case RV_CSR_mstatus:
             // Ensures the value 2 never gets written to MPP.
             wdata            |= (wdata >> 1) & RV_STATUS_MPP_BASE_BIT;
@@ -183,11 +192,13 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                 for (int b = 0; b < 8; b++) {
                     uint8_t old_byte = (old >> (b * 8)) & 0xFF;
                     uint8_t new_byte = (wdata >> (b * 8)) & RV_PMPCFG_BYTE_MASK;
-                    // Normalize A: only OFF (0b00) and NAPOT (0b11) are supported.
-                    // TOR (0b01) → OFF; NA4 (0b10) → NAPOT (grain ≥ 4 makes NA4 unselectable).
-                    uint8_t a = (new_byte >> RV_PMPCFG_A_BASE_BIT) & 3;
-                    new_byte  = (new_byte & (uint8_t) ~(3 << RV_PMPCFG_A_BASE_BIT)) |
-                                (uint8_t)((a & 2 ? 3 : 0) << RV_PMPCFG_A_BASE_BIT);
+                    // Normalize A: only OFF (0b00) and NAPOT (0b11) are
+                    // supported. TOR (0b01) → OFF; NA4 (0b10) → NAPOT (grain ≥
+                    // 4 makes NA4 unselectable).
+                    uint8_t a        = (new_byte >> RV_PMPCFG_A_BASE_BIT) & 3;
+                    new_byte =
+                        (new_byte & (uint8_t)~(3 << RV_PMPCFG_A_BASE_BIT)) |
+                        (uint8_t)((a & 2 ? 3 : 0) << RV_PMPCFG_A_BASE_BIT);
                     // Locked bytes are not modified.
                     result |=
                         (uint64_t)(old_byte & (1 << RV_PMPCFG_L_BIT) ? old_byte

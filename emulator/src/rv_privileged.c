@@ -11,9 +11,12 @@
 #include <assert.h>
 
 // Execute a certain trap handler.
-void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+void rv_do_trap(
+    struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap
+) {
     assert(trap.cause < 32);
-    if (machine->trap_hook[trap.cause] && !machine->trap_hook[trap.cause](machine->hook_cookie, machine, cpu, trap)) {
+    rv_trap_fn_t hook = machine->trap_hook[trap.cause];
+    if (hook && !hook(machine->hook_cookie, machine, cpu, trap)) {
         // Trap was handled by external hook.
         return;
     }
@@ -30,7 +33,7 @@ void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap t
         cpu->csr.mstatus |= spie << RV_STATUS_SPIE_BIT;
         cpu->csr.mstatus |= cpu->privilege << RV_STATUS_SPP_BIT;
         cpu->privilege    = 1;
-        cpu->pc           = cpu->csr.stvec;
+        cpu->pc           = cpu->csr.stvec & ~3;
     } else {
         // Execute handler in M-mode.
         cpu->csr.mepc     = trap.epc;
@@ -43,12 +46,14 @@ void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap t
         cpu->csr.mstatus |= mpie << RV_STATUS_MPIE_BIT;
         cpu->csr.mstatus |= cpu->privilege << RV_STATUS_MPP_BASE_BIT;
         cpu->privilege    = 3;
-        cpu->pc           = cpu->csr.mtvec;
+        cpu->pc           = cpu->csr.mtvec & ~3;
     }
 }
 
 // Execute the illegal instruction handler.
-void rv_do_iillegal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_do_iillegal(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
+) {
     rv_do_trap(
         machine,
         cpu,

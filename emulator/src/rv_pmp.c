@@ -29,11 +29,11 @@ uint8_t rv_pmp_check(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           paddr,
-    uint8_t            size_exp,
+    uint64_t           size,
     bool               m_mode
 ) {
     (void)machine;
-    uint64_t paddr1 = paddr + (1 << size_exp) - 1;
+    uint64_t paddr1 = paddr + size - 1;
 
     for (size_t i = 0; i < 64; i++) {
         uint8_t cfg     = cpu->csr.pmpcfg.unpacked[i];

@@ -28,7 +28,7 @@ union rv_pmpcfg {
 // Control and status register state.
 struct rv_csr_state {
     // Identifying information.
-    uint64_t mhartid, marchid, mimpid;
+    uint64_t mhartid, marchid, mimpid, mvendorid;
     // Note: `sstatus` uses a masked subset of this value.
     uint64_t mstatus;
     // Exception control: M-mode.
@@ -66,6 +66,12 @@ enum rv_xstate {
     RV_XSTATE_DIRTY   = 0b11,
 };
 
+#define RV_MISA_MASK(ext) ((uint64_t)1 << ((ext) - 'A'))
+#define RV_MISA_VALUE                                                          \
+    ((uint64_t)1 << 63 | RV_MISA_MASK('I') | RV_MISA_MASK('M') |               \
+     RV_MISA_MASK('A') | RV_MISA_MASK('F') | RV_MISA_MASK('D') |               \
+     RV_MISA_MASK('C'))
+
 #define RV_STATUS_SIE_BIT      1
 #define RV_STATUS_MIE_BIT      3
 #define RV_STATUS_SPIE_BIT     5
@@ -79,6 +85,12 @@ enum rv_xstate {
 #define RV_STATUS_MPRV_BIT     17
 #define RV_STATUS_SUM_BIT      18
 #define RV_STATUS_MXR_BIT      19
+#define RV_STATUS_UXL_BASE_BIT 32 // ,33
+#define RV_STATUS_SXL_BASE_BIT 34 // ,35
+
+#define RV_MSTATUS_HARDWIRED                                                   \
+    ((uint64_t)2 << RV_STATUS_UXL_BASE_BIT | (uint64_t)2                       \
+                                                 << RV_STATUS_SXL_BASE_BIT)
 
 #define RV_MSTATUS_MASK                                                        \
     ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_MIE_BIT |     \
