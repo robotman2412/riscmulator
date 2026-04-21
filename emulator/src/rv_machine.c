@@ -123,6 +123,7 @@ static bool misaligned_access(
             switch (mode) {
                 case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
                 case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+                case RV_ACCESS_AMO:
                 case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
             }
             rv_do_trap(
@@ -201,6 +202,7 @@ bool rv_access_phys(
     switch (mode) {
         case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
         case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+        case RV_ACCESS_AMO:
         case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
     }
     rv_do_trap(

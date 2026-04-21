@@ -47,7 +47,7 @@ void rv_forcefeed_insn(
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
     uint16_t hw;
-    RV_READ_RAM(*machine, uint16_t, cpu->pc, hw, goto iaccess;);
+    if (!rv_access_phys(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN)) return;
 
     uint32_t insn;
     if ((hw & 0x3u) != 0x3u) {
@@ -63,23 +63,11 @@ void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
         // Full 32-bit instruction: fetch the upper halfword.
         uint16_t hw2;
         uint64_t pc2 = cpu->pc + 2;
-        RV_READ_RAM(*machine, uint16_t, pc2, hw2, goto iaccess;);
+        if (!rv_access_phys(machine, cpu, pc2, &hw2, 1, RV_ACCESS_INSN)) return;
         insn      = (uint32_t)hw | ((uint32_t)hw2 << 16);
         cpu->epc  = cpu->pc;
         cpu->pc  += 4;
     }
 
     rv_forcefeed_insn(machine, cpu, insn);
-    return;
-
-iaccess:
-    rv_do_trap(
-        machine,
-        cpu,
-        (struct rv_trap){
-            .epc   = cpu->epc,
-            .cause = RV_CAUSE_IACCESS,
-            .tval  = cpu->epc,
-        }
-    );
 }

@@ -19,6 +19,8 @@ struct rv_cpu;
 enum rv_access {
     // Instruction fetch access.
     RV_ACCESS_INSN,
+    // Load access, but on fail raise store access fault instead.
+    RV_ACCESS_AMO,
     // Load access.
     RV_ACCESS_LOAD,
     // Store access.
@@ -92,23 +94,3 @@ bool rv_access_phys(
     uint8_t            size_exp,
     enum rv_access     mode
 );
-
-// Macro that tries to read from RAM.
-#define RV_READ_RAM(machine, data_type, addr_var, dest_var, fail_code)         \
-    if ((addr_var) >= (machine).ram_start &&                                   \
-        (addr_var) <= (machine).ram_end - sizeof(data_type)) {                 \
-        dest_var =                                                             \
-            *(data_type *)((machine).ram + (addr_var) - (machine).ram_start);  \
-    } else {                                                                   \
-        fail_code                                                              \
-    }
-
-// Macro that tries to write to RAM.
-#define RV_WRITE_RAM(machine, data_type, addr_var, source_var, fail_code)      \
-    if ((addr_var) >= (machine).ram_start &&                                   \
-        (addr_var) <= (machine).ram_end - sizeof(data_type)) {                 \
-        *(data_type *)((machine).ram + (addr_var) - (machine).ram_start) =     \
-            source_var;                                                        \
-    } else {                                                                   \
-        fail_code                                                              \
-    }

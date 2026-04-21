@@ -104,28 +104,31 @@ void rv_base_load(
         return;
     }
 
-    uint64_t rdata;
+    uint64_t rdata = 0;
     switch (RV_INSN_FUNCT3(insn)) {
         case 0:
-            RV_READ_RAM(*machine, int8_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD)) return;
+            rdata = (uint64_t)(int64_t)(int8_t)rdata;
             break;
         case 1:
-            RV_READ_RAM(*machine, int16_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD)) return;
+            rdata = (uint64_t)(int64_t)(int16_t)rdata;
             break;
         case 2:
-            RV_READ_RAM(*machine, int32_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD)) return;
+            rdata = (uint64_t)(int64_t)(int32_t)rdata;
             break;
         case 3:
-            RV_READ_RAM(*machine, int64_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD)) return;
             break;
         case 4:
-            RV_READ_RAM(*machine, uint8_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD)) return;
             break;
         case 5:
-            RV_READ_RAM(*machine, uint16_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD)) return;
             break;
         case 6:
-            RV_READ_RAM(*machine, uint32_t, addr, rdata, goto laccess;);
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD)) return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
     }
@@ -139,18 +142,6 @@ void rv_base_load(
     } else {
         rv_xreg_write(cpu, RV_INSN_RD(insn), rdata);
     }
-
-    return;
-laccess:
-    rv_do_trap(
-        machine,
-        cpu,
-        (struct rv_trap){
-            .cause = RV_CAUSE_LACCESS,
-            .epc   = cpu->epc,
-            .tval  = addr,
-        }
-    );
 }
 
 // Execute an instruction under the STORE or STORE-FP major opcodes.
@@ -176,31 +167,19 @@ void rv_base_store(
 
     switch (RV_INSN_FUNCT3(insn) & 3) {
         case 0:
-            RV_WRITE_RAM(*machine, uint8_t, addr, wdata, goto saccess;);
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE)) return;
             break;
         case 1:
-            RV_WRITE_RAM(*machine, uint16_t, addr, wdata, goto saccess;);
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE)) return;
             break;
         case 2:
-            RV_WRITE_RAM(*machine, uint32_t, addr, wdata, goto saccess;);
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE)) return;
             break;
         case 3:
-            RV_WRITE_RAM(*machine, uint64_t, addr, wdata, goto saccess;);
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE)) return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
     }
-
-    return;
-saccess:
-    rv_do_trap(
-        machine,
-        cpu,
-        (struct rv_trap){
-            .cause = RV_CAUSE_SACCESS,
-            .epc   = cpu->epc,
-            .tval  = addr,
-        }
-    );
 }
 
 // Execute an instruction under the JAL major opcode.
