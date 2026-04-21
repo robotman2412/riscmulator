@@ -79,14 +79,4 @@ void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu);
 [[gnu::always_inline]] static inline void
     rv_freg_write(struct rv_cpu *cpu, uint32_t index, union rv_freg value) {
     cpu->fregs[index] = value;
-    // printf(
-    //     "\033[34mrv_freg_write(..., %" PRIu32
-    //     ", {.f_64=%lf, .f_32=%f, .i_64=0x%" PRIx64 ", .i_32=0x%" PRIx32
-    //     "})\033[0m\n",
-    //     index,
-    //     value.f_64,
-    //     value.f_32,
-    //     value.i_64,
-    //     value.i_32
-    // );
 }
