@@ -1,7 +1,6 @@
 
 emulator_src = files(
     'src/rv_impl/base.c',
-    'src/rv_impl/csr.c',
     'src/rv_impl/atomics.c',
     'src/rv_impl/float.c',
     'src/rv_impl/muldiv.c',

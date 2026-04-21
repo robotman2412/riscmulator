@@ -6,7 +6,6 @@
 
 #include "rv_cpu.h"
 #include "rv_csr.h"
-#include "rv_impl/csr.h"
 #include "rv_impl/muldiv.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
@@ -107,28 +106,35 @@ void rv_base_load(
     uint64_t rdata = 0;
     switch (RV_INSN_FUNCT3(insn)) {
         case 0:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD))
+                return;
             rdata = (uint64_t)(int64_t)(int8_t)rdata;
             break;
         case 1:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD))
+                return;
             rdata = (uint64_t)(int64_t)(int16_t)rdata;
             break;
         case 2:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD))
+                return;
             rdata = (uint64_t)(int64_t)(int32_t)rdata;
             break;
         case 3:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD))
+                return;
             break;
         case 4:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD))
+                return;
             break;
         case 5:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD))
+                return;
             break;
         case 6:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD)) return;
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD))
+                return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
     }
@@ -167,16 +173,20 @@ void rv_base_store(
 
     switch (RV_INSN_FUNCT3(insn) & 3) {
         case 0:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE)) return;
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE))
+                return;
             break;
         case 1:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE)) return;
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE))
+                return;
             break;
         case 2:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE)) return;
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE))
+                return;
             break;
         case 3:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE)) return;
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE))
+                return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
     }
@@ -243,7 +253,8 @@ static void
     } else {
         wdata = rv_xreg_read(cpu, RV_INSN_RS1(insn));
         // CSRRW always writes; CSRRS/CSRRC skip the write when rs1=x0.
-        do_write = ((RV_INSN_FUNCT3(insn) & 3) == 1) || (RV_INSN_RS1(insn) != 0);
+        do_write =
+            ((RV_INSN_FUNCT3(insn) & 3) == 1) || (RV_INSN_RS1(insn) != 0);
     }
 
     uint64_t rdata = 0;

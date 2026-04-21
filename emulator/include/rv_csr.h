@@ -6,10 +6,20 @@
 
 #include <stdint.h>
 
+struct rv_cpu;
+
 // List of CSRs implemented by this emulator.
 enum rv_csr {
 #define RV_CSR_DEF(index, name) RV_CSR_##name = index,
 #include "rv_defs/csr.h"
+};
+
+// PMP configurations.
+union rv_pmpcfg {
+    // PMP configurations (packed into 64-bit words).
+    uint64_t packed[8];
+    // PMP configurations (individual).
+    uint8_t  unpacked[64];
 };
 
 // Control and status register state.
@@ -22,6 +32,11 @@ struct rv_csr_state {
     uint64_t mie, mip, mideleg, medeleg, mtvec;
     // Exception status: M-mode.
     uint64_t mcause, mtval, mepc, mtinst;
+
+    // PMP configurations.
+    union rv_pmpcfg pmpcfg;
+    // PMP addresses.
+    uint64_t        pmpaddr[64];
 
     // Exception control: S-mode.
     uint64_t sie, sip, stvec;
@@ -81,6 +96,10 @@ enum rv_xstate {
      (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT | \
      (uint64_t)1 << RV_STATUS_MXR_BIT)
 
+// Check extension enable bits.
+#define RV_CHECK_XS(bits, xs_base_bit)                                         \
+    ((((bits) >> (xs_base_bit)) & 3) != RV_XSTATE_OFF)
+
 // Invalid operation.
 #define RV_FFLAGS_NV_BIT 4
 // Division by zero.
@@ -107,6 +126,8 @@ enum rv_xstate {
 // Get a CSR by name; returns 0 if not found.
 [[gnu::const]] enum rv_csr rv_csr_from_name(char const *name);
 
-// Check extension enable bits.
-#define RV_CHECK_XS(bits, xs_base_bit)                                         \
-    ((((bits) >> (xs_base_bit)) & 3) != RV_XSTATE_OFF)
+// Try to read a CSR; fails if no permission or does not exist.
+bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata);
+// Try to write a CSR; fails if no permission or does not exist.
+// CSR writes do not fail for invalid values; instead, no action is taken.
+bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata);

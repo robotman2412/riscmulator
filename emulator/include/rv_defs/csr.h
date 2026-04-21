@@ -47,6 +47,12 @@ RV_CSR_DEF(0x343, mtval)
 RV_CSR_DEF(0x344, mip)
 RV_CSR_DEF(0x34A, mtinst)
 
+/* ==== PHYSICAL MEMORY PROTECTION ==== */
+RV_CSR_DEF(0x3A0, pmpcfg0)
+RV_CSR_DEF(0x3AF, pmpcfg15)
+RV_CSR_DEF(0x3B0, pmpaddr0)
+RV_CSR_DEF(0x3EF, pmpaddr63)
+
 /* ==== MACHINE MODE COUNTERS ==== */
 RV_CSR_DEF(0xB00, mcycle)
 RV_CSR_DEF(0xB02, minstret)
