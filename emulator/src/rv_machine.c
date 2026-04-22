@@ -85,12 +85,69 @@ void rv_machine_destroy(struct rv_machine *machine) {
     free(machine->cpus);
     free(machine->reservations);
     free(machine->ram);
+    free(machine->mmio);
     machine->cpus         = nullptr;
     machine->reservations = nullptr;
     machine->ram          = nullptr;
+    machine->mmio         = nullptr;
     machine->cpu_count    = 0;
+    machine->mmio_count   = 0;
     machine->ram_start    = 0;
     machine->ram_end      = 0;
+}
+
+bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region) {
+    struct rv_mmio_region *arr = realloc(
+        machine->mmio,
+        (machine->mmio_count + 1) * sizeof(struct rv_mmio_region)
+    );
+    if (!arr) return false;
+    machine->mmio                        = arr;
+    machine->mmio[machine->mmio_count++] = region;
+    return true;
+}
+
+// Dispatch a single MMIO access to a known region.
+// data=nullptr is a no-op (permission-check pass); returns true.
+// Returns false (with trap raised) if the device signals an access fault.
+static bool mmio_dispatch(
+    struct rv_machine     *machine,
+    struct rv_cpu         *cpu,
+    struct rv_mmio_region *r,
+    uint64_t               addr,
+    void                  *data,
+    uint8_t                size,
+    enum rv_access         mode
+) {
+    if (!data) return true;
+
+    bool ok;
+    if (mode == RV_ACCESS_STORE) {
+        uint64_t val = 0;
+        memcpy(&val, data, size);
+        ok = r->write(r->device, addr - r->base, size, val);
+    } else {
+        uint64_t val = 0;
+        ok           = r->read(r->device, addr - r->base, size, &val);
+        if (ok) memcpy(data, &val, size);
+    }
+
+    if (!ok) {
+        enum rv_cause cause;
+        switch (mode) {
+            case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
+            case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+            case RV_ACCESS_AMO:
+            case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
+        }
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr}
+        );
+        return false;
+    }
+    return true;
 }
 
 // Implementation of misaligned accesses.
@@ -120,25 +177,40 @@ static bool misaligned_access(
             addr += part;
             size -= part;
 
-        } else { // TODO: Partial MMIO access.
-            // Invalid access.
-            enum rv_cause cause;
-            switch (mode) {
-                case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
-                case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
-                case RV_ACCESS_AMO:
-                case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
-            }
-            rv_do_trap(
-                machine,
-                cpu,
-                (struct rv_trap){
-                    .cause = cause,
-                    .epc   = cpu->epc,
-                    .tval  = addr,
+        } else {
+            // Not in RAM — try MMIO.
+            struct rv_mmio_region *r = nullptr;
+            for (size_t i = 0; i < machine->mmio_count; i++) {
+                if (addr >= machine->mmio[i].base &&
+                    addr < machine->mmio[i].base + machine->mmio[i].size) {
+                    r = &machine->mmio[i];
+                    break;
                 }
-            );
-            return false;
+            }
+            if (!r) {
+                enum rv_cause cause;
+                switch (mode) {
+                    case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
+                    case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
+                    case RV_ACCESS_AMO:
+                    case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
+                }
+                rv_do_trap(
+                    machine,
+                    cpu,
+                    (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr}
+                );
+                return false;
+            }
+            uint64_t part = size;
+            if (addr + part > r->base + r->size) {
+                part = r->base + r->size - addr;
+            }
+            if (!mmio_dispatch(machine, cpu, r, addr, data, (uint8_t)part, mode)) {
+                return false;
+            }
+            addr += part;
+            size -= part;
         }
     }
 
@@ -245,6 +317,14 @@ bool rv_access_phys(
         // the second actually commits to the access.
         return misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
                misaligned_access(machine, cpu, addr, data, size, mode);
+    }
+
+    // Aligned MMIO dispatch.
+    for (size_t i = 0; i < machine->mmio_count; i++) {
+        struct rv_mmio_region *r = &machine->mmio[i];
+        if (addr >= r->base && addr + size <= r->base + r->size) {
+            return mmio_dispatch(machine, cpu, r, addr, data, (uint8_t)size, mode);
+        }
     }
 
     // Invalid access.

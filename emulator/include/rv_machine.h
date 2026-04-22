@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "rv_device.h"
 #include "rv_privileged.h"
 
 #include <stdbool.h>
@@ -60,6 +61,9 @@ struct rv_machine {
     // One LR reservation per hart, indexed by mhartid; protected by
     // atomic_lock.
     struct rv_reservation *reservations;
+    // MMIO regions; scanned on every non-RAM access.
+    struct rv_mmio_region *mmio;
+    size_t                 mmio_count;
 };
 
 // Initialise a machine: allocate cpu_count CPUs, RAM of ram_size bytes at
@@ -75,6 +79,9 @@ bool rv_machine_init(
 void rv_machine_run(struct rv_machine *machine);
 // Free all resources allocated by rv_machine_init.
 void rv_machine_destroy(struct rv_machine *machine);
+// Append an MMIO region to the machine's dispatch table (copied by value).
+// Returns false on allocation failure.
+bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region);
 
 // Partial access to physical memory (e.g. spanning virtual page boundary).
 bool rv_access_phys_partial(

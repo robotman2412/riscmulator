@@ -5,6 +5,7 @@ test_src = files(
     'src/decompress.c',
     'src/main.c',
     'src/mem.c',
+    'src/mmio.c',
     'src/multicpu.c',
     'src/op.c',
     'src/pmp.c',
