@@ -5,9 +5,11 @@
 #pragma once
 
 #include "rv_csr.h"
+#include "rv_paging.h"
 #include "softfloat.h"
 
 #include <inttypes.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 struct rv_machine;
@@ -30,6 +32,8 @@ union rv_freg {
 
 // One RISC-V CPU core's configuration and state.
 struct rv_cpu {
+    // Translation lookaside buffer.
+    struct rv_tlb       tlb;
     // Integer registers, the first is always zero and never written.
     uint64_t            xregs[32];
     // Floating-point registers.
@@ -44,6 +48,8 @@ struct rv_cpu {
     uint8_t             privilege;
     // Set to true to stop this CPU's execution thread.
     bool                halted;
+    // External interrupt lines driven by the PLIC (bits match mip: MEIP=11, SEIP=9).
+    _Atomic uint64_t    plic_irq;
 };
 
 // Execute one instruction word.
