@@ -61,7 +61,7 @@ in the MMIO Infrastructure stage below.
 
 ---
 
-## MMIO Infrastructure
+## ~~MMIO Infrastructure~~ ✓ DONE
 
 **Why now:** M-mode and S-mode tests require interrupt delivery via the PLIC, which is an MMIO
 device. The MMIO dispatch layer must exist before the PLIC can be built, and both must exist
@@ -88,7 +88,7 @@ before the privileged-mode test suite can pass.
 
 ---
 
-## PLIC (Platform-Level Interrupt Controller)
+## ~~PLIC (Platform-Level Interrupt Controller)~~ ✓ DONE
 
 **Why now:** The privileged-mode test suite exercises external interrupt delivery. The PLIC is
 the interrupt controller Linux and the rv64si tests expect; it must be ready before those tests
@@ -110,6 +110,81 @@ can pass.
    the PLIC to iterate `machine->cpus[i]` when raising/clearing SEIP — do not hard-code a
    single `cpu` pointer inside the device.
 6. Write tests: register a mock interrupt source, trigger it, verify claim returns correct ID.
+
+---
+
+## CLINT (Core Local Interruptor) — Hardware Timer
+
+**Why:** Real firmware (OpenSBI, bare-metal code) accesses `mtime` and `mtimecmp` via MMIO
+directly rather than via trap hooks. Without a proper CLINT device, any firmware that does not
+go through the emulator's SBI shim cannot drive timer interrupts. This is required for Linux
+boot with real OpenSBI.
+
+### Spec reference: RISC-V Privileged ISA §3.1.10 (machine timer); SiFive CLINT spec / QEMU virt layout.
+
+### MMIO layout (QEMU virt, base `0x02000000`, size `0x10000`)
+
+| Offset | Width | Description |
+|---|---|---|
+| `0x0000 + 4·hart` | 4 B | MSIP — machine software interrupt pending per hart |
+| `0x4000 + 8·hart` | 8 B | `mtimecmp[hart]` — per-hart timer compare register |
+| `0xBFF8` | 8 B | `mtime` — global monotonic tick counter (10 MHz) |
+
+### Tasks
+
+1. Create `emulator/src/rv_clint.c` / `emulator/include/rv_clint.h`.
+2. **No ticker thread.** `mtime` is a virtual counter derived on demand from the host clock:
+   ```c
+   uint64_t rv_clint_mtime(rv_clint *clint) {
+       struct timespec ts;
+       clock_gettime(CLOCK_MONOTONIC, &ts);
+       uint64_t ns = (ts.tv_sec - clint->epoch.tv_sec) * 1000000000ULL
+                   + (ts.tv_nsec - clint->epoch.tv_nsec);
+       return ns / 100; /* 10 MHz: 1 tick = 100 ns */
+   }
+   ```
+   `epoch` is captured once at CLINT init. `mtime` MMIO reads call this function; MMIO writes
+   to `mtime` shift the epoch to make the returned value match the written value.
+3. **`mtimecmp` writes pre-compute a host-clock deadline:**
+   ```c
+   clint->mtimecmp[hart] = value;
+   clint->deadline_ns[hart] = clint->epoch_ns + value * 100; /* absolute CLOCK_MONOTONIC ns */
+   ```
+   Storing `deadline_ns` avoids re-doing the multiply on every interrupt check.
+4. **Interrupt check in the CPU run loop:** the run loop already checks `mip & mie` at
+   instruction boundaries. Add one comparison per hart there:
+   ```c
+   if (cpu->mip_MTIP_armed) {
+       struct timespec now; clock_gettime(CLOCK_MONOTONIC, &now);
+       if (now_ns >= clint->deadline_ns[hart]) { set mip.MTIP; disarm; }
+   }
+   ```
+   `mip_MTIP_armed` is a flag set when `mtimecmp` is written to a future time and cleared when
+   `MTIP` fires; this avoids the `clock_gettime` call when no timer is pending.
+5. Implement CLINT MMIO register map:
+   - `mtime` (read): call `rv_clint_mtime()`.
+   - `mtime` (write): adjust epoch.
+   - `mtimecmp[hart]` (write): store value, compute `deadline_ns`, arm the flag, clear `mip.MTIP`.
+   - `MSIP[hart]` (write): set/clear `cpu[hart].mip.MSIP`.
+6. **SBI shim convergence:** `sbi_set_timer` writes to `clint->mtimecmp[hart]` via the same
+   setter used by MMIO writes, so both paths arm the deadline identically.
+7. Register the CLINT as an MMIO device at base `0x02000000` during machine init.
+8. Write tests (all using the real host clock or a mock epoch):
+   - Write a future `mtimecmp`, call the check function immediately → `MTIP` not set.
+   - Write `mtimecmp = 0` (always in the past), call the check function → `MTIP` set.
+   - After `MTIP` fires, write a new future `mtimecmp` → `MTIP` clears, flag re-armed.
+   - MSIP write to hart 0 → `mip.MSIP` set on hart 0, other harts unaffected.
+   - `mtime` MMIO read returns a plausible non-zero value after a short `nanosleep`.
+
+### Design notes
+
+- `clock_gettime(CLOCK_MONOTONIC)` is a vDSO call on Linux — no syscall overhead, ~20 ns.
+  Calling it once per interrupt-check boundary (which already happens) is negligible.
+- The `mip_MTIP_armed` flag is the fast-path guard: when no timer is pending, the check is a
+  single branch on a per-CPU boolean. The `clock_gettime` is only paid when a timer is live.
+- With multiple harts, each hart's run loop only checks its own `deadline_ns[hart]`; no
+  cross-hart locking is needed for the check itself. The only shared write is the epoch, which
+  is set once at init and only modified by explicit `mtime` MMIO writes (rare).
 
 ---
 
@@ -246,8 +321,9 @@ can pass.
 | F extension                  | rv64uf (all)              | ✓ done  |
 | D extension                  | rv64ud (all)              | ✓ done  |
 | Memory access refactor       | mem unit tests            | ✓ done  |
-| MMIO infrastructure          | mock device test          |         |
-| PLIC                         | PLIC unit tests           |         |
+| MMIO infrastructure          | mock device test          | ✓ done  |
+| PLIC                         | PLIC unit tests           | ✓ done  |
+| CLINT / hardware timer       | CLINT unit tests          |         |
 | Privileged hardening         | rv64mi + rv64si           |         |
 | Sv39 virtual memory          | custom MMU tests          |         |
 | UART NS16550A                | UART unit tests           |         |
@@ -263,9 +339,10 @@ can pass.
 - **Strict illegal-instruction enforcement**: Any opcode or funct3/funct7 combination not
   explicitly listed in the ISA must call `rv_do_iillegal()`. Audit each new implementation
   file as it is written; do not add a `default: /* ignore */` fallthrough.
-- **Timer source**: For SBI timer, decide between instruction-count-based timer (deterministic,
-  easy) vs host `CLOCK_MONOTONIC` (accurate). Linux needs the timer to fire; accuracy matters
-  less for initial boot.
+- **Timer source**: `mtime` is derived lazily from `CLOCK_MONOTONIC` (a Linux vDSO call,
+  ~20 ns) scaled to 10 MHz. No ticker thread — `mtimecmp` writes pre-compute an absolute
+  host-clock deadline; the CPU run loop checks it with a single branch guarded by an
+  `armed` flag, only calling `clock_gettime` when a timer is actually live.
 - **VirtIO version**: Use MMIO transport v2 (legacy MMIO is simpler but Linux may not probe it
   without DTS hints). Confirm in DTB which transport to advertise.
 - **Linux config**: Use a minimal `defconfig` + `CONFIG_SERIAL_8250=y`,
