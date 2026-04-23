@@ -7,6 +7,8 @@
 #include "rv_cpu.h"
 #include "string.h"
 
+#include <stdatomic.h>
+
 // Get the name of a CSR; returns `nullptr` if invalid.
 char const *rv_csr_to_name(enum rv_csr csr) {
     switch (csr) {
@@ -44,7 +46,11 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
             *rdata = cpu->csr.mstatus | RV_MSTATUS_HARDWIRED;
             break;
         case RV_CSR_mie: *rdata = cpu->csr.mie; break;
-        case RV_CSR_mip: *rdata = cpu->csr.mip; break;
+        case RV_CSR_mip:
+            *rdata = cpu->csr.mip
+                   | atomic_load_explicit(&cpu->plic_irq,   memory_order_relaxed)
+                   | atomic_load_explicit(&cpu->clint_irq,  memory_order_relaxed);
+            break;
         case RV_CSR_mideleg: *rdata = cpu->csr.mideleg; break;
         case RV_CSR_medeleg: *rdata = cpu->csr.medeleg; break;
         case RV_CSR_mtvec: *rdata = cpu->csr.mtvec; break;

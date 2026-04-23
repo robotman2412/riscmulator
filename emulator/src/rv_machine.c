@@ -4,11 +4,13 @@
 
 #include "rv_machine.h"
 
+#include "rv_clint.h"
 #include "rv_cpu.h"
 #include "rv_csr.h"
 #include "rv_pmp.h"
 #include "rv_privileged.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -24,6 +26,8 @@ static void *cpu_thread(void *arg) {
     struct cpu_thread_arg *a = arg;
     while (!a->cpu->halted) {
         rv_step_insn(a->machine, a->cpu);
+        if (atomic_load_explicit(&a->cpu->clint_timer_armed, memory_order_relaxed))
+            rv_clint_check_timer(a->machine->clint, a->cpu);
     }
     return nullptr;
 }

@@ -15,6 +15,7 @@
 
 struct rv_machine;
 struct rv_cpu;
+struct rv_clint;
 
 // RAM access mode.
 enum rv_access {
@@ -64,6 +65,8 @@ struct rv_machine {
     // MMIO regions; scanned on every non-RAM access.
     struct rv_mmio_region *mmio;
     size_t                 mmio_count;
+    // Optional CLINT device; NULL if not present. Set before rv_machine_run.
+    struct rv_clint       *clint;
 };
 
 // Initialise a machine: allocate cpu_count CPUs, RAM of ram_size bytes at
