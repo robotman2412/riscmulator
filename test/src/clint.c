@@ -45,7 +45,7 @@ TESTCASE(clint_timer_not_fired_yet, {
 
     rv_clint_check_timer(&clint, cpu);
 
-    uint64_t irq = atomic_load(&cpu->clint_irq);
+    uint64_t irq = atomic_load(&cpu->irq_pending);
     TEST_ASSERT(!(irq & (UINT64_C(1) << RV_CLINT_MTIP_BIT)));
 
     rv_clint_destroy(&clint);
@@ -65,7 +65,7 @@ TESTCASE(clint_timer_past_fires, {
 
     rv_clint_check_timer(&clint, cpu);
 
-    uint64_t irq = atomic_load(&cpu->clint_irq);
+    uint64_t irq = atomic_load(&cpu->irq_pending);
     TEST_ASSERT(irq & (UINT64_C(1) << RV_CLINT_MTIP_BIT));
 
     rv_clint_destroy(&clint);
@@ -85,7 +85,7 @@ TESTCASE(clint_timer_rearm, {
         machine, cpu, CLINT_BASE + 0x4000, &zero, 3, RV_ACCESS_STORE
     ));
     rv_clint_check_timer(&clint, cpu);
-    TEST_ASSERT(atomic_load(&cpu->clint_irq) & (UINT64_C(1) << RV_CLINT_MTIP_BIT));
+    TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_CLINT_MTIP_BIT));
 
     // Re-arm with a future deadline.
     uint64_t future = rv_clint_mtime(&clint) + UINT64_C(1000000000);
@@ -94,13 +94,13 @@ TESTCASE(clint_timer_rearm, {
     ));
 
     // MTIP must be cleared after writing a new mtimecmp.
-    TEST_ASSERT(!(atomic_load(&cpu->clint_irq) & (UINT64_C(1) << RV_CLINT_MTIP_BIT)));
+    TEST_ASSERT(!(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_CLINT_MTIP_BIT)));
     // Armed flag must be set.
     TEST_ASSERT(atomic_load(&cpu->clint_timer_armed));
 
     // Immediate check must not re-fire (future deadline).
     rv_clint_check_timer(&clint, cpu);
-    TEST_ASSERT(!(atomic_load(&cpu->clint_irq) & (UINT64_C(1) << RV_CLINT_MTIP_BIT)));
+    TEST_ASSERT(!(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_CLINT_MTIP_BIT)));
 
     rv_clint_destroy(&clint);
 })
@@ -121,18 +121,18 @@ TESTCASE_NOMACHINE(clint_msip_hart0, {
     // Set MSIP for hart 0.
     uint32_t one = 1;
     TEST_ASSERT(rv_access_phys(&machine, cpu0, CLINT_BASE + 0x0000, &one, 2, RV_ACCESS_STORE));
-    TEST_ASSERT(atomic_load(&cpu0->clint_irq) & (UINT64_C(1) << RV_CLINT_MSIP_BIT));
-    TEST_ASSERT(!(atomic_load(&cpu1->clint_irq) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
+    TEST_ASSERT(atomic_load(&cpu0->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT));
+    TEST_ASSERT(!(atomic_load(&cpu1->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
 
     // Clear MSIP for hart 0.
     uint32_t zero = 0;
     TEST_ASSERT(rv_access_phys(&machine, cpu0, CLINT_BASE + 0x0000, &zero, 2, RV_ACCESS_STORE));
-    TEST_ASSERT(!(atomic_load(&cpu0->clint_irq) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
+    TEST_ASSERT(!(atomic_load(&cpu0->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
 
     // Set MSIP for hart 1 — hart 0 must remain clear.
     TEST_ASSERT(rv_access_phys(&machine, cpu0, CLINT_BASE + 0x0004, &one, 2, RV_ACCESS_STORE));
-    TEST_ASSERT(!(atomic_load(&cpu0->clint_irq) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
-    TEST_ASSERT(atomic_load(&cpu1->clint_irq) & (UINT64_C(1) << RV_CLINT_MSIP_BIT));
+    TEST_ASSERT(!(atomic_load(&cpu0->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT)));
+    TEST_ASSERT(atomic_load(&cpu1->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT));
 
     rv_clint_destroy(&clint);
     rv_machine_destroy(&machine);
@@ -179,6 +179,99 @@ TESTCASE(clint_mtip_visible_in_mip, {
     TEST_ASSERT(mip & (UINT64_C(1) << RV_CLINT_MTIP_BIT));
 
     rv_clint_destroy(&clint);
+})
+
+// mip write only touches SIP_WMASK bits; hardware-owned bits (MSIP=3, MTIP=7, MEIP=11) are ignored.
+TESTCASE_NOMACHINE(mip_write_mask_hw_bits_ignored, {
+    struct rv_machine machine = {0};
+    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct rv_cpu *cpu = &machine.cpus[0];
+
+    // Pre-set a known MSIP (bit 3) via irq_pending directly.
+    atomic_store(&cpu->irq_pending, UINT64_C(0));
+
+    // Write all bits via mip CSR — hardware bits must not stick.
+    TEST_ASSERT(rv_csr_write(cpu, RV_CSR_mip, UINT64_MAX));
+
+    uint64_t ip = atomic_load(&cpu->irq_pending);
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 3)));   // MSIP not set
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 7)));   // MTIP not set
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 11)));  // MEIP not set
+    // SIP_WMASK bits must be set.
+    TEST_ASSERT(ip & (UINT64_C(1) << 1));   // SSIP set
+    TEST_ASSERT(ip & (UINT64_C(1) << 5));   // STIP set
+    TEST_ASSERT(ip & (UINT64_C(1) << 9));   // SEIP set
+
+    rv_machine_destroy(&machine);
+})
+
+// mip write clears SIP_WMASK bits when wdata=0; hardware bits in irq_pending untouched.
+TESTCASE_NOMACHINE(mip_write_clears_sip_bits, {
+    struct rv_machine machine = {0};
+    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct rv_cpu *cpu = &machine.cpus[0];
+
+    // Pre-set all bits (simulating hardware having set MSIP/MTIP/MEIP).
+    atomic_store(&cpu->irq_pending, UINT64_MAX);
+
+    // Write zero via mip CSR — only SIP_WMASK bits should be cleared.
+    TEST_ASSERT(rv_csr_write(cpu, RV_CSR_mip, UINT64_C(0)));
+
+    uint64_t ip = atomic_load(&cpu->irq_pending);
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 1)));   // SSIP cleared
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 5)));   // STIP cleared
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 9)));   // SEIP cleared
+    // Hardware bits must be untouched.
+    TEST_ASSERT(ip & (UINT64_C(1) << 3));   // MSIP still set
+    TEST_ASSERT(ip & (UINT64_C(1) << 7));   // MTIP still set
+    TEST_ASSERT(ip & (UINT64_C(1) << 11));  // MEIP still set
+
+    rv_machine_destroy(&machine);
+})
+
+// sip write is masked by mideleg & SIP_WMASK; hardware-owned bits never affected.
+TESTCASE_NOMACHINE(sip_write_mask, {
+    struct rv_machine machine = {0};
+    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct rv_cpu *cpu = &machine.cpus[0];
+    cpu->privilege = 1; // S-mode
+    // Delegate all software-writable interrupt bits to S-mode.
+    cpu->csr.mideleg = RV_SIP_WMASK;
+
+    atomic_store(&cpu->irq_pending, UINT64_C(0));
+
+    TEST_ASSERT(rv_csr_write(cpu, RV_CSR_sip, UINT64_MAX));
+
+    uint64_t ip = atomic_load(&cpu->irq_pending);
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 3)));   // MSIP not set
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 7)));   // MTIP not set
+    TEST_ASSERT(!(ip & (UINT64_C(1) << 11)));  // MEIP not set
+    TEST_ASSERT(ip & (UINT64_C(1) << 1));      // SSIP set
+    TEST_ASSERT(ip & (UINT64_C(1) << 5));      // STIP set
+    TEST_ASSERT(ip & (UINT64_C(1) << 9));      // SEIP set
+
+    rv_machine_destroy(&machine);
+})
+
+// sip read shows only delegated bits (mideleg masking); non-delegated bits invisible.
+TESTCASE_NOMACHINE(sip_read_reflects_irq_pending, {
+    struct rv_machine machine = {0};
+    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct rv_cpu *cpu = &machine.cpus[0];
+    cpu->privilege = 1; // S-mode
+    // Delegate SSIP to S-mode; leave MSIP (bit 3) non-delegated.
+    cpu->csr.mideleg = UINT64_C(1) << RV_MIP_SSIP_BIT;
+
+    // Fire both SSIP and MSIP directly.
+    atomic_store(&cpu->irq_pending,
+        (UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_MSIP_BIT));
+
+    uint64_t sip = 0;
+    TEST_ASSERT(rv_csr_read(cpu, RV_CSR_sip, &sip));
+    TEST_ASSERT(sip & (UINT64_C(1) << RV_MIP_SSIP_BIT));    // delegated: visible
+    TEST_ASSERT(!(sip & (UINT64_C(1) << RV_MIP_MSIP_BIT))); // not delegated: hidden
+
+    rv_machine_destroy(&machine);
 })
 
 // Writing mtime via MMIO adjusts the epoch so reads return approximately the written value.

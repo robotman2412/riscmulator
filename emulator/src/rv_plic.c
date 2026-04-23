@@ -24,7 +24,7 @@
 #define PLIC_CTX_OFF_THRESHOLD UINT32_C(0x000)
 #define PLIC_CTX_OFF_CLAIM     UINT32_C(0x004)
 
-// Update all harts' plic_irq fields to reflect the current PLIC state.
+// Update all harts' irq_pending fields to reflect the current PLIC state.
 // Must be called while plic->lock is held.
 static void plic_update_harts(struct rv_plic *plic) {
     for (size_t ctx = 0; ctx < plic->num_contexts; ctx++) {
@@ -49,9 +49,9 @@ static void plic_update_harts(struct rv_plic *plic) {
         uint64_t       irqbit = mode == 0 ? (UINT64_C(1) << RV_PLIC_MEIP_BIT)
                                           : (UINT64_C(1) << RV_PLIC_SEIP_BIT);
         if (has_irq) {
-            atomic_fetch_or(&cpu->plic_irq, irqbit);
+            atomic_fetch_or(&cpu->irq_pending, irqbit);
         } else {
-            atomic_fetch_and(&cpu->plic_irq, ~irqbit);
+            atomic_fetch_and(&cpu->irq_pending, ~irqbit);
         }
     }
 }

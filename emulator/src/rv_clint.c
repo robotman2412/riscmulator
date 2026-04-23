@@ -78,7 +78,7 @@ void rv_clint_set_mtimecmp(struct rv_clint *clint, uint64_t hart, uint64_t value
 
     // Clear MTIP; the new deadline will re-fire immediately if already past.
     atomic_fetch_and_explicit(
-        &cpu->clint_irq, ~(UINT64_C(1) << RV_CLINT_MTIP_BIT), memory_order_relaxed
+        &cpu->irq_pending, ~(UINT64_C(1) << RV_CLINT_MTIP_BIT), memory_order_relaxed
     );
 
     pthread_mutex_lock(&clint->lock);
@@ -100,7 +100,7 @@ void rv_clint_check_timer(struct rv_clint *clint, struct rv_cpu *cpu) {
     );
     if (now_ns() >= deadline) {
         atomic_fetch_or_explicit(
-            &cpu->clint_irq, UINT64_C(1) << RV_CLINT_MTIP_BIT, memory_order_relaxed
+            &cpu->irq_pending, UINT64_C(1) << RV_CLINT_MTIP_BIT, memory_order_relaxed
         );
         atomic_store_explicit(&cpu->clint_timer_armed, false, memory_order_relaxed);
     }
@@ -134,7 +134,7 @@ static bool clint_read(void *dev, uint64_t offset, uint8_t size, uint64_t *out) 
         uint64_t idx = offset / CLINT_MSIP_STRIDE;
         if (idx < clint->cpu_count && offset % CLINT_MSIP_STRIDE == 0) {
             struct rv_cpu *cpu = &clint->machine->cpus[idx];
-            uint64_t irq = atomic_load_explicit(&cpu->clint_irq, memory_order_relaxed);
+            uint64_t irq = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
             *out = (irq >> RV_CLINT_MSIP_BIT) & 1u;
             return true;
         }
@@ -177,12 +177,12 @@ static bool clint_write(void *dev, uint64_t offset, uint8_t size, uint64_t value
             struct rv_cpu *cpu = &clint->machine->cpus[idx];
             if (value & 1u) {
                 atomic_fetch_or_explicit(
-                    &cpu->clint_irq, UINT64_C(1) << RV_CLINT_MSIP_BIT,
+                    &cpu->irq_pending, UINT64_C(1) << RV_CLINT_MSIP_BIT,
                     memory_order_relaxed
                 );
             } else {
                 atomic_fetch_and_explicit(
-                    &cpu->clint_irq, ~(UINT64_C(1) << RV_CLINT_MSIP_BIT),
+                    &cpu->irq_pending, ~(UINT64_C(1) << RV_CLINT_MSIP_BIT),
                     memory_order_relaxed
                 );
             }

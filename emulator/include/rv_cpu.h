@@ -48,12 +48,12 @@ struct rv_cpu {
     uint8_t             privilege;
     // Set to true to stop this CPU's execution thread.
     bool                halted;
-    // External interrupt lines driven by the PLIC (bits match mip: MEIP=11, SEIP=9).
-    _Atomic uint64_t    plic_irq;
+    // Single interrupt-pending register; bits match the mip/sip layout.
+    // CLINT owns MSIP(3) and MTIP(7); PLIC owns MEIP(11) and SEIP(9).
+    // Software writes via mip/sip CSR are masked to RV_SIP_WMASK.
+    _Atomic uint64_t    irq_pending;
     // Armed when mtimecmp is written; guards the per-instruction clock_gettime call.
     _Atomic bool        clint_timer_armed;
-    // External interrupt lines driven by CLINT (bits match mip: MSIP=3, MTIP=7).
-    _Atomic uint64_t    clint_irq;
 };
 
 // Execute one instruction word.

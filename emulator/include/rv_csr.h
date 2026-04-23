@@ -32,7 +32,7 @@ struct rv_csr_state {
     // Note: `sstatus` uses a masked subset of this value.
     uint64_t mstatus;
     // Exception control: M-mode.
-    uint64_t mie, mip, mideleg, medeleg, mtvec;
+    uint64_t mie, mideleg, medeleg, mtvec;
     // Exception status: M-mode.
     uint64_t mcause, mtval, mepc, mtinst;
 
@@ -42,7 +42,7 @@ struct rv_csr_state {
     uint64_t        pmpaddr[64];
 
     // Exception control: S-mode.
-    uint64_t sie, sip, stvec;
+    uint64_t sie, stvec;
     // Exception status: S-mode.
     uint64_t scause, stval, sepc;
     // Scratch registers.
@@ -135,6 +135,19 @@ enum rv_xstate {
 #define RV_FRM_MASK    0x7
 // Implemented bits in `fcsr`.
 #define RV_FCSR_MASK   (RV_FRM_MASK << RV_FCSR_FRM_BASE_BIT | RV_FFLAGS_MASK)
+
+// Interrupt-pending bit positions (mip / sip / irq_pending).
+#define RV_MIP_SSIP_BIT 1  // Supervisor software interrupt
+#define RV_MIP_MSIP_BIT 3  // Machine software interrupt (CLINT-owned)
+#define RV_MIP_STIP_BIT 5  // Supervisor timer interrupt
+#define RV_MIP_MTIP_BIT 7  // Machine timer interrupt (CLINT-owned)
+#define RV_MIP_SEIP_BIT 9  // Supervisor external interrupt
+#define RV_MIP_MEIP_BIT 11 // Machine external interrupt (PLIC-owned)
+
+// Bits writable via mip or sip CSR writes (hardware owns MSIP, MTIP, MEIP).
+#define RV_SIP_WMASK                                                           \
+    ((UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_STIP_BIT) |   \
+     (UINT64_C(1) << RV_MIP_SEIP_BIT))
 
 // PMP configuration byte bit fields.
 #define RV_PMPCFG_R_BIT         0 // Read permission.

@@ -256,13 +256,13 @@ TESTCASE(plic_highest_priority_wins, {
     rv_plic_destroy(&plic);
 })
 
-// PLIC sets MEIP in cpu->plic_irq for the M-mode context when an interrupt is pending.
+// PLIC sets MEIP in cpu->irq_pending for the M-mode context when an interrupt is pending.
 TESTCASE(plic_mip_meip_set, {
     struct rv_plic plic = {0};
     TEST_ASSERT(rv_plic_init(&plic, machine));
     TEST_ASSERT(rv_machine_add_mmio(machine, rv_plic_mmio_region(&plic, PLIC_BASE)));
 
-    TEST_ASSERT(atomic_load(&cpu->plic_irq) == 0);
+    TEST_ASSERT(atomic_load(&cpu->irq_pending) == 0);
 
     uint64_t val = 1;
     TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
@@ -270,12 +270,12 @@ TESTCASE(plic_mip_meip_set, {
     TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
     rv_plic_set_pending(&plic, 1);
 
-    TEST_ASSERT(atomic_load(&cpu->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
+    TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
 
     rv_plic_destroy(&plic);
 })
 
-// PLIC sets SEIP in cpu->plic_irq for the S-mode context (context 1) when pending.
+// PLIC sets SEIP in cpu->irq_pending for the S-mode context (context 1) when pending.
 TESTCASE(plic_mip_seip_set, {
     struct rv_plic plic = {0};
     TEST_ASSERT(rv_plic_init(&plic, machine));
@@ -289,8 +289,8 @@ TESTCASE(plic_mip_seip_set, {
     TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2080, &val, 2, RV_ACCESS_STORE));
     rv_plic_set_pending(&plic, 1);
 
-    TEST_ASSERT(atomic_load(&cpu->plic_irq) & (UINT64_C(1) << RV_PLIC_SEIP_BIT));
-    TEST_ASSERT(!(atomic_load(&cpu->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
+    TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_SEIP_BIT));
+    TEST_ASSERT(!(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
 
     rv_plic_destroy(&plic);
 })
@@ -306,13 +306,13 @@ TESTCASE(plic_mip_cleared_on_claim, {
     val = 1u << 1;
     TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
     rv_plic_set_pending(&plic, 1);
-    TEST_ASSERT(atomic_load(&cpu->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
+    TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
 
     val = 0;
     TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
     TEST_ASSERT(val == 1);
 
-    TEST_ASSERT(!(atomic_load(&cpu->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
+    TEST_ASSERT(!(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
 
     rv_plic_destroy(&plic);
 })
@@ -347,13 +347,13 @@ TESTCASE_NOMACHINE(plic_multicore_contexts, {
 
     // Trigger source 1: only hart 0 should be notified.
     rv_plic_set_pending(&plic, 1);
-    TEST_ASSERT(atomic_load(&cpu0->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
-    TEST_ASSERT(!(atomic_load(&cpu1->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
+    TEST_ASSERT(atomic_load(&cpu0->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
+    TEST_ASSERT(!(atomic_load(&cpu1->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
 
     // Trigger source 2: hart 1 is now also notified; hart 0 still set.
     rv_plic_set_pending(&plic, 2);
-    TEST_ASSERT(atomic_load(&cpu0->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
-    TEST_ASSERT(atomic_load(&cpu1->plic_irq) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
+    TEST_ASSERT(atomic_load(&cpu0->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
+    TEST_ASSERT(atomic_load(&cpu1->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
 
     rv_plic_destroy(&plic);
     rv_machine_destroy(&machine);

@@ -47,9 +47,8 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
             break;
         case RV_CSR_mie: *rdata = cpu->csr.mie; break;
         case RV_CSR_mip:
-            *rdata = cpu->csr.mip
-                   | atomic_load_explicit(&cpu->plic_irq,   memory_order_relaxed)
-                   | atomic_load_explicit(&cpu->clint_irq,  memory_order_relaxed);
+            *rdata =
+                atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
             break;
         case RV_CSR_mideleg: *rdata = cpu->csr.mideleg; break;
         case RV_CSR_medeleg: *rdata = cpu->csr.medeleg; break;
@@ -62,7 +61,11 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
 
         case RV_CSR_sstatus: *rdata = cpu->csr.mstatus & RV_SSTATUS_MASK; break;
         case RV_CSR_sie: *rdata = cpu->csr.sie; break;
-        case RV_CSR_sip: *rdata = cpu->csr.sip; break;
+        case RV_CSR_sip:
+            *rdata =
+                atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) &
+                cpu->csr.mideleg;
+            break;
         case RV_CSR_stvec: *rdata = cpu->csr.stvec; break;
         case RV_CSR_scause: *rdata = cpu->csr.scause; break;
         case RV_CSR_stval: *rdata = cpu->csr.stval; break;
@@ -102,10 +105,10 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
                              RV_PMPCFG_A_BASE_BIT) &
                             3;
                 if (a == RV_PMP_ADDR_MATCH_NAPOT) {
-                    *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_NAPOT_MASK;
-                } else {
                     *rdata =
-                        cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_OFF_MASK;
+                        cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_NAPOT_MASK;
+                } else {
+                    *rdata = cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_OFF_MASK;
                 }
             } else {
                 // No matches.
@@ -137,7 +140,16 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
             cpu->csr.mstatus  = wdata & RV_MSTATUS_MASK;
             break;
         case RV_CSR_mie: cpu->csr.mie = wdata; break;
-        case RV_CSR_mip: cpu->csr.mip = wdata; break;
+        case RV_CSR_mip: {
+            uint64_t old, desired;
+            do {
+                old     = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
+                desired = (old & ~RV_SIP_WMASK) | (wdata & RV_SIP_WMASK);
+            } while (!atomic_compare_exchange_weak_explicit(
+                &cpu->irq_pending, &old, desired,
+                memory_order_relaxed, memory_order_relaxed));
+            break;
+        }
         case RV_CSR_mideleg: cpu->csr.mideleg = wdata; break;
         case RV_CSR_medeleg: cpu->csr.medeleg = wdata; break;
         case RV_CSR_mtvec: cpu->csr.mtvec = wdata; break;
@@ -153,7 +165,17 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
             cpu->csr.mstatus |= wdata & RV_SSTATUS_MASK;
             break;
         case RV_CSR_sie: cpu->csr.sie = wdata; break;
-        case RV_CSR_sip: cpu->csr.sip = wdata; break;
+        case RV_CSR_sip: {
+            uint64_t mask = cpu->csr.mideleg & RV_SIP_WMASK;
+            uint64_t old, desired;
+            do {
+                old     = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
+                desired = (old & ~mask) | (wdata & mask);
+            } while (!atomic_compare_exchange_weak_explicit(
+                &cpu->irq_pending, &old, desired,
+                memory_order_relaxed, memory_order_relaxed));
+            break;
+        }
         case RV_CSR_stvec: cpu->csr.stvec = wdata; break;
         case RV_CSR_scause: cpu->csr.scause = wdata; break;
         case RV_CSR_stval: cpu->csr.stval = wdata; break;
