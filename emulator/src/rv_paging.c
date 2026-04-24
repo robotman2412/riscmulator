@@ -14,17 +14,61 @@
 
 
 
+// Check PMP and PTE access bits.
+static enum rv_mem_result check_access(struct rv_cpu *cpu, struct rv_tlb_entry entry, enum rv_access mode) {
+    bool user_pte = entry.pte & (1 << RV_PTE_U_BIT);
+    if (cpu->mem_privilege == 0) {
+        // U-mode access.
+        if (!user_pte) {
+            // U-mode denied access to supervisor pages.
+            return RV_MEM_PAGE_FAULT;
+        }
+    } else {
+        // S-mode or higher access.
+        bool sum = cpu->csr.mstatus & (1 << RV_STATUS_SUM_BIT);
+        if (user_pte && !sum) {
+            // S-mode prevented from accidental user memory access.
+            return RV_MEM_PAGE_FAULT;
+        }
+    }
+
+    switch (mode) {
+        case RV_ACCESS_INSN:
+            if ((entry.pte & (1 << RV_PTE_X_BIT)) == 0) {
+                return RV_MEM_PAGE_FAULT;
+            } else if ((entry.vma & (1 << RV_PMPCFG_X_BIT)) == 0) {
+                return RV_MEM_ACCESS_FAULT;
+            }
+            break;
+        case RV_ACCESS_LOAD:
+            if ((entry.pte & (1 << RV_PTE_R_BIT)) == 0) {
+                return RV_MEM_PAGE_FAULT;
+            } else if ((entry.vma & (1 << RV_PMPCFG_R_BIT)) == 0) {
+                return RV_MEM_ACCESS_FAULT;
+            }
+            break;
+        case RV_ACCESS_AMO:
+        case RV_ACCESS_STORE:
+            if ((entry.pte & (1 << RV_PTE_W_BIT)) == 0) {
+                return RV_MEM_PAGE_FAULT;
+            } else if ((entry.vma & (1 << RV_PMPCFG_W_BIT)) == 0) {
+                return RV_MEM_ACCESS_FAULT;
+            }
+            break;
+    }
+
+    return RV_MEM_OK;
+}
+
 // Look up a page-table entry without using the TLB.
 // Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
 enum rv_mem_result rv_paging_raw_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 ) {
     enum rv_mem_result res;
-    uint64_t           setfl = 0;
-    if (set_d) {
-        setfl = 1 << RV_PTE_A_BIT | 1 << RV_PTE_D_BIT;
-    } else if (set_a) {
-        setfl = 1 << RV_PTE_A_BIT;
+    uint64_t           setfl = 1 << RV_PTE_A_BIT;
+    if (mode == RV_ACCESS_AMO || mode == RV_ACCESS_STORE) {
+        setfl |= 1 << RV_PTE_D_BIT;
     }
 
     uint64_t satp_asid = (cpu->csr.satp & RV_SATP_ASID_MASK) >> RV_SATP_ASID_BASE_BIT;
@@ -47,8 +91,7 @@ enum rv_mem_result rv_paging_raw_lookup(
 
         if ((pte & (1 << RV_PTE_V_BIT)) == 0) {
             // Nothing mapped.
-            *out = (struct rv_tlb_entry){0};
-            return RV_MEM_OK;
+            return RV_MEM_PAGE_FAULT;
         }
 
         uint64_t next_ppn = (pte & RV_PTE_PPN_MASK) >> RV_PTE_PPN_BASE_BIT;
@@ -58,25 +101,36 @@ enum rv_mem_result rv_paging_raw_lookup(
             if ((next_ppn & align_mask) != 0) {
                 return RV_MEM_PAGE_FAULT;
             }
+
+            // Cache PMP result of actual target page.
+            uint8_t next_pmp = rv_pmp_check(machine, cpu, next_ppn * RV_CPU_PAGE_SIZE, RV_CPU_PAGE_SIZE, false);
+
+            uint64_t superpage_offset = (vaddr >> RV_CPU_PAGE_SIZE_EXP) & align_mask;
+
+            struct rv_tlb_entry entry = {
+                .vma = satp_asid << RV_TLB_ASID_BASE_BIT | (vaddr & RV_TLB_VPN_MASK) | next_pmp,
+                .pte = pte | superpage_offset << RV_PTE_PPN_BASE_BIT,
+            };
+            res = check_access(cpu, entry, mode);
+            if (res != RV_MEM_OK) {
+                return res;
+            }
             if ((pte & setfl) != setfl) {
                 if ((pte_pmp & (1 << RV_PMPCFG_W_BIT)) == 0) {
                     // Couldn't write to the PTE.
                     return RV_MEM_ACCESS_FAULT;
                 }
                 // Set A/D flags.
-                pte |= setfl;
-                res  = rv_access_phys(machine, cpu, pte_paddr, &pte, 3, RV_ACCESS_STORE, true);
+                pte       |= setfl;
+                entry.pte |= setfl;
+                res        = rv_access_phys(machine, cpu, pte_paddr, &pte, 3, RV_ACCESS_STORE, true);
                 if (res != RV_MEM_OK) {
                     return res;
                 }
             }
 
-            // Cache PMP result of actual target page.
-            uint8_t next_pmp = rv_pmp_check(machine, cpu, next_ppn * RV_CPU_PAGE_SIZE, RV_CPU_PAGE_SIZE, false);
-
             // Valid leaf PTE.
-            out->vma = satp_asid << RV_TLB_ASID_BASE_BIT | (vaddr & RV_TLB_VPN_MASK) | next_pmp;
-            out->pte = pte;
+            *out = entry;
             return RV_MEM_OK;
         } else {
             // Non-leaf PTE.
@@ -91,16 +145,13 @@ enum rv_mem_result rv_paging_raw_lookup(
 // Do a cached lookup; try reading from the TLB first.
 // Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
 enum rv_mem_result rv_paging_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 ) {
     enum rv_mem_result res;
-    size_t             row = vaddr / RV_CPU_PAGE_SIZE % RV_TLB_ROWS;
-
-    uint64_t setfl = 0;
-    if (set_d) {
-        setfl = 1 << RV_PTE_A_BIT | 1 << RV_PTE_D_BIT;
-    } else if (set_a) {
-        setfl = 1 << RV_PTE_A_BIT;
+    size_t             row   = vaddr / RV_CPU_PAGE_SIZE % RV_TLB_ROWS;
+    uint64_t           setfl = 1 << RV_PTE_A_BIT;
+    if (mode == RV_ACCESS_AMO || mode == RV_ACCESS_STORE) {
+        setfl |= 1 << RV_PTE_D_BIT;
     }
 
     uint16_t satp_asid = (cpu->csr.satp & RV_SATP_ASID_MASK) >> RV_SATP_ASID_BASE_BIT;
@@ -132,7 +183,7 @@ enum rv_mem_result rv_paging_lookup(
     }
 
     // Fall back to walking the page table.
-    res = rv_paging_raw_lookup(machine, cpu, vaddr, out, set_a, set_d);
+    res = rv_paging_raw_lookup(machine, cpu, vaddr, out, mode);
     if (res != RV_MEM_OK) {
         return res;
     }
@@ -159,35 +210,6 @@ enum rv_mem_result rv_paging_lookup(
     return RV_MEM_OK;
 }
 
-// Check PMP and PTE access bits.
-static enum rv_mem_result check_access(struct rv_tlb_entry entry, enum rv_access mode) {
-    switch (mode) {
-        case RV_ACCESS_INSN:
-            if ((entry.pte & (1 << RV_PTE_X_BIT)) == 0) {
-                return RV_MEM_PAGE_FAULT;
-            } else if ((entry.vma & (1 << RV_PMPCFG_X_BIT)) == 0) {
-                return RV_MEM_ACCESS_FAULT;
-            }
-            break;
-        case RV_ACCESS_LOAD:
-            if ((entry.pte & (1 << RV_PTE_R_BIT)) == 0) {
-                return RV_MEM_PAGE_FAULT;
-            } else if ((entry.vma & (1 << RV_PMPCFG_R_BIT)) == 0) {
-                return RV_MEM_ACCESS_FAULT;
-            }
-            break;
-        case RV_ACCESS_AMO:
-        case RV_ACCESS_STORE:
-            if ((entry.pte & (1 << RV_PTE_W_BIT)) == 0) {
-                return RV_MEM_PAGE_FAULT;
-            } else if ((entry.vma & (1 << RV_PMPCFG_W_BIT)) == 0) {
-                return RV_MEM_ACCESS_FAULT;
-            }
-            break;
-    }
-    return RV_MEM_OK;
-}
-
 // Implementation of `rv_access_virt` for accesses spanning page boundaries.
 static inline enum rv_mem_result rv_access_virt_pageboundary(
     struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
@@ -204,24 +226,14 @@ static inline enum rv_mem_result rv_access_virt_pageboundary(
         return RV_MEM_PAGE_FAULT;
     }
 
-    res = rv_paging_lookup(machine, cpu, vaddr, &result0, true, mode == RV_ACCESS_AMO || mode == RV_ACCESS_STORE);
+    res = rv_paging_lookup(machine, cpu, vaddr, &result0, mode);
     if (res != RV_MEM_OK) {
         // Faulted while translating.
         return res;
     }
-    res = rv_paging_lookup(machine, cpu, vaddr1, &result1, true, mode == RV_ACCESS_AMO || mode == RV_ACCESS_STORE);
+    res = rv_paging_lookup(machine, cpu, vaddr1, &result1, mode);
     if (res != RV_MEM_OK) {
         // Faulted while translating.
-        return res;
-    }
-    res = check_access(result0, mode);
-    if (res != RV_MEM_OK) {
-        // TLB does NOT grant permission.
-        return res;
-    }
-    res = check_access(result1, mode);
-    if (res != RV_MEM_OK) {
-        // TLB does NOT grant permission.
         return res;
     }
 
@@ -248,7 +260,8 @@ enum rv_mem_result rv_access_virt(
     struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
 ) {
     enum rv_mem_result res;
-    if (cpu->privilege == 3 || (cpu->csr.satp & RV_SATP_MODE_MASK) >> RV_SATP_MODE_BASE_BIT == 0) {
+    uint8_t            eff_priv = (mode == RV_ACCESS_INSN) ? cpu->privilege : cpu->mem_privilege;
+    if (eff_priv == 3 || (cpu->csr.satp & RV_SATP_MODE_MASK) >> RV_SATP_MODE_BASE_BIT == 0) {
         // Virtual memory disabled; do physical access directly.
         return rv_access_phys(machine, cpu, vaddr, data, size_exp, mode, false);
     }
@@ -266,14 +279,9 @@ enum rv_mem_result rv_access_virt(
         return rv_access_virt_pageboundary(machine, cpu, vaddr, data, size_exp, mode);
     }
 
-    res = rv_paging_lookup(machine, cpu, vaddr, &result, true, mode == RV_ACCESS_AMO || mode == RV_ACCESS_STORE);
+    res = rv_paging_lookup(machine, cpu, vaddr, &result, mode);
     if (res != RV_MEM_OK) {
         // Faulted while translating.
-        return res;
-    }
-    res = check_access(result, mode);
-    if (res != RV_MEM_OK) {
-        // TLB does NOT grant permission.
         return res;
     }
 

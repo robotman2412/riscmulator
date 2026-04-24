@@ -55,7 +55,7 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_mtinst: *rdata = cpu->csr.mtinst; break;
         case RV_CSR_mscratch: *rdata = cpu->csr.mscratch; break;
 
-        case RV_CSR_sstatus: *rdata = cpu->csr.mstatus & RV_SSTATUS_MASK; break;
+        case RV_CSR_sstatus: *rdata = (cpu->csr.mstatus & RV_SSTATUS_MASK) | RV_SSTATUS_HARDWIRED; break;
         case RV_CSR_sie: *rdata = cpu->csr.sie; break;
         case RV_CSR_sip:
             *rdata = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) & cpu->csr.mideleg;
@@ -134,6 +134,7 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
             // Ensures the value 2 never gets written to MPP.
             wdata            |= (wdata >> 1) & RV_STATUS_MPP_BASE_BIT;
             cpu->csr.mstatus  = wdata & RV_MSTATUS_MASK;
+            rv_sync_mem_privilege(cpu);
             break;
         case RV_CSR_mie: cpu->csr.mie = wdata; break;
         case RV_CSR_mip: {

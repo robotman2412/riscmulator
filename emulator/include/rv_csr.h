@@ -91,6 +91,7 @@ enum rv_xstate {
 #define RV_STATUS_SXL_BASE_BIT 34 // ,35
 
 #define RV_MSTATUS_HARDWIRED ((uint64_t)2 << RV_STATUS_UXL_BASE_BIT | (uint64_t)2 << RV_STATUS_SXL_BASE_BIT)
+#define RV_SSTATUS_HARDWIRED ((uint64_t)2 << RV_STATUS_UXL_BASE_BIT)
 
 #define RV_MSTATUS_MASK                                                                                                \
     ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_MIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |         \

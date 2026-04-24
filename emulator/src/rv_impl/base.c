@@ -261,10 +261,15 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
     } else if (insn == 0x30200073 && cpu->privilege == 3) {
         // mret
         bool mpie         = (cpu->csr.mstatus >> RV_STATUS_MPIE_BIT) & 1;
-        cpu->csr.mstatus &= ~(1llu << RV_STATUS_MIE_BIT);
-        cpu->csr.mstatus |= mpie << RV_STATUS_MIE_BIT;
+        cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_MIE_BIT);
+        cpu->csr.mstatus |= mpie << RV_STATUS_MIE_BIT | 1 << RV_STATUS_MPIE_BIT;
         cpu->privilege    = (cpu->csr.mstatus >> RV_STATUS_MPP_BASE_BIT) & 3;
-        cpu->pc           = cpu->csr.mepc;
+        cpu->csr.mstatus &= ~(UINT64_C(3) << RV_STATUS_MPP_BASE_BIT);
+        if (cpu->privilege != 3) {
+            cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_MPRV_BIT);
+        }
+        rv_sync_mem_privilege(cpu);
+        cpu->pc = cpu->csr.mepc;
     } else if (insn == 0x10200073) {
         // sret: S-mode or higher required; TSR=1 in S-mode traps
         if (cpu->privilege < 1 || (cpu->privilege == 1 && ((cpu->csr.mstatus >> RV_STATUS_TSR_BIT) & 1))) {
@@ -278,7 +283,9 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
         cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SPP_BIT);
         cpu->csr.mstatus |= UINT64_C(1) << RV_STATUS_SPIE_BIT;
         cpu->privilege    = (uint8_t)spp;
-        cpu->pc           = cpu->csr.sepc;
+        cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_MPRV_BIT);
+        rv_sync_mem_privilege(cpu);
+        cpu->pc = cpu->csr.sepc;
     } else if (insn == 0x10500073) {
         // wfi: illegal if TW=1 and below M-mode; otherwise NOP/yield
         if (cpu->privilege < 3 && ((cpu->csr.mstatus >> RV_STATUS_TW_BIT) & 1)) {

@@ -89,6 +89,7 @@ static void vm_setup(struct rv_machine *machine, struct rv_cpu *cpu) {
 
     cpu->csr.satp  = SATP_A;
     cpu->privilege = 1; // S-mode
+    rv_sync_mem_privilege(cpu);
 }
 
 // Build Layout B page tables into physical pages 6-8.
@@ -242,14 +243,14 @@ VM_TESTCASE(vm_asid_no_stale, {
 
     // Warm up TLB with Layout A entry for VA 0x1000.
     struct rv_tlb_entry entry;
-    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x1000, &entry, true, false) == RV_MEM_OK)
+    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x1000, &entry, RV_ACCESS_LOAD) == RV_MEM_OK)
     TEST_ASSERT((entry.pte & (1 << RV_PTE_V_BIT)) != 0)
 
     // Switch to Layout B.
     cpu->csr.satp = SATP_B;
 
     struct rv_tlb_entry entry_b;
-    enum rv_mem_result  res = rv_paging_lookup(machine, cpu, 0x1000, &entry_b, true, false);
+    enum rv_mem_result  res = rv_paging_lookup(machine, cpu, 0x1000, &entry_b, RV_ACCESS_LOAD);
     // Either a page fault, or an OK result with V=0 (no mapping).
     if (res == RV_MEM_OK) {
         TEST_ASSERT((entry_b.pte & (1 << RV_PTE_V_BIT)) == 0)
@@ -271,7 +272,7 @@ VM_TESTCASE(vm_asid_global_page, {
 
     // Warm up TLB with the global entry for VA 0x4000 (ASID=0).
     struct rv_tlb_entry entry_a;
-    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x4000, &entry_a, true, false) == RV_MEM_OK)
+    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x4000, &entry_a, RV_ACCESS_LOAD) == RV_MEM_OK)
     TEST_ASSERT((entry_a.pte & (1 << RV_PTE_V_BIT)) != 0)
     TEST_ASSERT((entry_a.pte & (1 << RV_PTE_G_BIT)) != 0)
 
@@ -280,10 +281,92 @@ VM_TESTCASE(vm_asid_global_page, {
 
     // The global TLB entry must be served: valid, G bit set, same PPN.
     struct rv_tlb_entry entry_b;
-    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x4000, &entry_b, true, false) == RV_MEM_OK)
+    TEST_ASSERT(rv_paging_lookup(machine, cpu, 0x4000, &entry_b, RV_ACCESS_LOAD) == RV_MEM_OK)
     TEST_ASSERT((entry_b.pte & (1 << RV_PTE_V_BIT)) != 0)
     TEST_ASSERT((entry_b.pte & (1 << RV_PTE_G_BIT)) != 0)
     uint64_t ppn_a = (entry_a.pte & RV_PTE_PPN_MASK) >> RV_PTE_PPN_BASE_BIT;
     uint64_t ppn_b = (entry_b.pte & RV_PTE_PPN_MASK) >> RV_PTE_PPN_BASE_BIT;
     TEST_ASSERT(ppn_a == ppn_b)
+})
+
+// ─── MPRV ─────────────────────────────────────────────────────────────────────
+
+// M-mode with MPRV=1, MPP=S-mode: data loads/stores go through S-mode VM.
+VM_TESTCASE(vm_mprv_load, {
+    vm_setup(machine, cpu);
+    cpu->privilege    = 3;
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPRV_BIT) | (UINT64_C(1) << RV_STATUS_MPP_BASE_BIT);
+    rv_sync_mem_privilege(cpu);
+    TEST_ASSERT(cpu->mem_privilege == 1) // MPRV=1, MPP=S → effective = S
+
+    uint64_t expect = UINT64_C(0xDEADBEEFCAFEBABE);
+    memcpy(machine->ram + 0x3000, &expect, 8);
+
+    uint64_t got = 0;
+    TEST_ASSERT(rv_access_virt(machine, cpu, 0x1000, &got, 3, RV_ACCESS_LOAD) == RV_MEM_OK)
+    TEST_ASSERT(got == expect)
+})
+
+// M-mode without MPRV bypasses VM; mem_privilege tracks privilege.
+VM_TESTCASE(vm_mprv_inactive, {
+    vm_setup(machine, cpu);
+    cpu->privilege = 3;
+    rv_sync_mem_privilege(cpu);
+    TEST_ASSERT(cpu->mem_privilege == 3) // MPRV=0 → effective = M
+
+    uint64_t expect = UINT64_C(0x1122334455667788);
+    memcpy(machine->ram + 0x3000, &expect, 8);
+
+    uint64_t got = 0;
+    // Physical address 0x80003000 is accessed directly (no VM translation).
+    TEST_ASSERT(rv_access_virt(machine, cpu, VM_RAM_BASE + 0x3000, &got, 3, RV_ACCESS_LOAD) == RV_MEM_OK)
+    TEST_ASSERT(got == expect)
+})
+
+// mret to non-M clears MPRV and syncs mem_privilege.
+VM_TESTCASE(vm_mprv_clears_on_mret, {
+    vm_setup(machine, cpu);
+    cpu->privilege    = 3;
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPRV_BIT) | (UINT64_C(1) << RV_STATUS_MPP_BASE_BIT);
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPIE_BIT);
+    cpu->csr.mepc     = VM_RAM_BASE;
+    rv_sync_mem_privilege(cpu);
+    TEST_ASSERT(cpu->mem_privilege == 1) // pre-mret: MPRV=1, MPP=S
+
+    rv_forcefeed_insn(machine, cpu, 0x30200073); // mret
+    TEST_ASSERT(cpu->privilege == 1)
+    TEST_ASSERT((cpu->csr.mstatus & (UINT64_C(1) << RV_STATUS_MPRV_BIT)) == 0)
+    TEST_ASSERT(cpu->mem_privilege == 1) // MPRV=0, privilege=S
+})
+
+// mret to M-mode keeps MPRV set.
+VM_TESTCASE(vm_mprv_kept_on_mret_to_m, {
+    vm_setup(machine, cpu);
+    cpu->privilege    = 3;
+    // Set MPRV=1, MPP=M (bits 12:11 = 11).
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPRV_BIT);
+    cpu->csr.mstatus |= (UINT64_C(3) << RV_STATUS_MPP_BASE_BIT);
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPIE_BIT);
+    cpu->csr.mepc     = VM_RAM_BASE;
+    rv_sync_mem_privilege(cpu);
+
+    rv_forcefeed_insn(machine, cpu, 0x30200073); // mret
+    TEST_ASSERT(cpu->privilege == 3)
+    TEST_ASSERT((cpu->csr.mstatus & (UINT64_C(1) << RV_STATUS_MPRV_BIT)) != 0)
+    TEST_ASSERT(cpu->mem_privilege == 0) // MPRV=1, MPP=U → effective = U
+})
+
+// sret always clears MPRV.
+VM_TESTCASE(vm_mprv_clears_on_sret, {
+    vm_setup(machine, cpu); // privilege=1 (S-mode)
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_MPRV_BIT);
+    cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SPP_BIT); // SPP=0 → return to U
+    cpu->csr.mstatus |= (UINT64_C(1) << RV_STATUS_SPIE_BIT);
+    cpu->csr.sepc     = VM_RAM_BASE;
+    rv_sync_mem_privilege(cpu);
+
+    rv_forcefeed_insn(machine, cpu, 0x10200073); // sret
+    TEST_ASSERT(cpu->privilege == 0)
+    TEST_ASSERT((cpu->csr.mstatus & (UINT64_C(1) << RV_STATUS_MPRV_BIT)) == 0)
+    TEST_ASSERT(cpu->mem_privilege == 0) // MPRV=0, privilege=U
 })

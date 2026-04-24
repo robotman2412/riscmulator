@@ -140,7 +140,6 @@ RISCV_TEST1(rv64ua, amoxor_w)
 RISCV_TEST1(rv64ua, amoswap_w)
 RISCV_TEST1(rv64ua, lrsc)
 
-/*
 RISCV_TEST1(rv64si, csr)
 RISCV_TEST1(rv64si, dirty)
 RISCV_TEST2(rv64si, "rv64si", icache_alias, "icache-alias")
@@ -148,7 +147,6 @@ RISCV_TEST1(rv64si, ma_fetch)
 RISCV_TEST1(rv64si, scall)
 RISCV_TEST1(rv64si, wfi)
 RISCV_TEST1(rv64si, sbreak)
-*/
 
 // RISCV_TEST1(rv64mi, breakpoint) // Not supported.
 RISCV_TEST1(rv64mi, csr)
@@ -329,8 +327,8 @@ static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char c
         return false;
     }
     machine->ram       = ram;
-    machine->ram_start = 0x10000;
-    machine->ram_end   = 0x10000 + alloc;
+    machine->ram_start = 0x80000000;
+    machine->ram_end   = 0x80000000 + alloc;
     memset(machine->ram, 0, alloc);
     fread(machine->ram, 1, len, f);
     fclose(f);
@@ -351,7 +349,7 @@ static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char c
     }
 
     cpu->privilege = 3;
-    cpu->pc        = 0x10000;
+    cpu->pc        = 0x80000000;
 
     uint64_t cyc = 0;
     while (!st.finished) {

@@ -51,15 +51,15 @@ struct rv_tlb {
 };
 
 // Look up a page-table entry without using the TLB.
-// Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
+// Sets A/D flags according to `mode` if the PTE and PMP grant access.
 enum rv_mem_result rv_paging_raw_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 );
 
 // Do a cached lookup; try reading from the TLB first.
-// Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
+// Sets A/D flags according to `mode` if the PTE and PMP grant access.
 enum rv_mem_result rv_paging_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 );
 
 // Access virtual memory.

@@ -46,6 +46,9 @@ struct rv_cpu {
     uint64_t            epc;
     // Current privilege level.
     uint8_t             privilege;
+    // Effective privilege level for data memory accesses (MPRV-adjusted).
+    // When mstatus.MPRV=1, this equals MPP; otherwise equals privilege.
+    uint8_t             mem_privilege;
     // Set to true to stop this CPU's execution thread.
     bool                halted;
     // Single interrupt-pending register; bits match the mip/sip layout.
@@ -55,6 +58,13 @@ struct rv_cpu {
     // Armed when mtimecmp is written; guards the per-instruction clock_gettime call.
     _Atomic bool        clint_timer_armed;
 };
+
+// Recompute mem_privilege from mstatus.MPRV/MPP and cpu->privilege.
+// Must be called whenever mstatus or privilege changes.
+[[gnu::always_inline]] static inline void rv_sync_mem_privilege(struct rv_cpu *cpu) {
+    bool mprv          = (cpu->csr.mstatus >> RV_STATUS_MPRV_BIT) & 1;
+    cpu->mem_privilege = mprv ? (uint8_t)((cpu->csr.mstatus >> RV_STATUS_MPP_BASE_BIT) & 3) : cpu->privilege;
+}
 
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
