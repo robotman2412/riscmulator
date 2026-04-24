@@ -9,6 +9,7 @@
 #include "rv_impl/muldiv.h"
 #include "rv_insn.h"
 #include "rv_machine.h"
+#include "rv_paging.h"
 #include "rv_privileged.h"
 
 #include <stdatomic.h>
@@ -291,7 +292,11 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
             rv_do_iillegal(machine, cpu, insn);
             return;
         }
-        // No virtual memory yet; serves as a TLB-flush NOP.
+        uint64_t vaddr     = rv_xreg_read(cpu, RV_INSN_RS1(insn));
+        uint16_t asid      = rv_xreg_read(cpu, RV_INSN_RS2(insn));
+        bool     use_vaddr = RV_INSN_RS1(insn);
+        bool     use_asid  = RV_INSN_RS2(insn);
+        rv_inval_tlb(cpu, vaddr, asid, use_vaddr, use_asid);
     } else if (insn == 0x00000073) {
         // ecall
         enum rv_cause cause;

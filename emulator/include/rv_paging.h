@@ -67,5 +67,17 @@ enum rv_mem_result rv_access_virt(
     struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
 );
 
+// Clear the entire TLB.
+void rv_flush_tlb(struct rv_cpu *cpu);
+
+// Invalidate all entries with the ASID.
+void rv_inval_tlb_asid(struct rv_cpu *cpu, uint16_t asid);
+
+// Invalidate a specific virtual address.
+void rv_inval_tlb_vaddr(struct rv_cpu *cpu, uint64_t vaddr, uint16_t asid, bool with_asid);
+
+// Invalidate matching TLB entries.
+void rv_inval_tlb(struct rv_cpu *cpu, uint64_t vaddr, uint16_t asid, bool with_vaddr, bool with_asid);
+
 // Whether a virtual address is canonical.
 bool rv_is_canon_vaddr(struct rv_cpu *cpu, uint64_t vaddr);

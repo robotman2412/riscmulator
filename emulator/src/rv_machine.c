@@ -148,9 +148,9 @@ static enum rv_mem_result misaligned_access(
 
             void *ptr = machine->ram + addr - machine->ram_start;
             if (data && mode == RV_ACCESS_STORE) {
-                memcpy(data, ptr, part);
-            } else if (data) {
                 memcpy(ptr, data, part);
+            } else if (data) {
+                memcpy(data, ptr, part);
             }
             addr += part;
             size -= part;

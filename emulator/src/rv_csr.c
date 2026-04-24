@@ -5,6 +5,7 @@
 #include "rv_csr.h"
 
 #include "rv_cpu.h"
+#include "rv_paging.h"
 #include "string.h"
 
 #include <stdatomic.h>
@@ -12,7 +13,7 @@
 // Get the name of a CSR; returns `nullptr` if invalid.
 char const *rv_csr_to_name(enum rv_csr csr) {
     switch (csr) {
-#define RV_CSR_DEF(index, name)                                                \
+#define RV_CSR_DEF(index, name)                                                                                        \
     case index: return #name;
 #include "rv_defs/csr.h"
         default: return nullptr;
@@ -21,9 +22,9 @@ char const *rv_csr_to_name(enum rv_csr csr) {
 
 // Get a CSR by name; returns 0 if not found.
 enum rv_csr rv_csr_from_name(char const *name) {
-#define RV_CSR_DEF(index, name_)                                               \
-    if (!strcmp(name, #name_)) {                                               \
-        return index;                                                          \
+#define RV_CSR_DEF(index, name_)                                                                                       \
+    if (!strcmp(name, #name_)) {                                                                                       \
+        return index;                                                                                                  \
     }
 #include "rv_defs/csr.h"
     return 0;
@@ -42,14 +43,9 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_marchid: *rdata = cpu->csr.marchid; break;
         case RV_CSR_mvendorid: *rdata = cpu->csr.mvendorid; break;
         case RV_CSR_mimpid: *rdata = cpu->csr.mimpid; break;
-        case RV_CSR_mstatus:
-            *rdata = cpu->csr.mstatus | RV_MSTATUS_HARDWIRED;
-            break;
+        case RV_CSR_mstatus: *rdata = cpu->csr.mstatus | RV_MSTATUS_HARDWIRED; break;
         case RV_CSR_mie: *rdata = cpu->csr.mie; break;
-        case RV_CSR_mip:
-            *rdata =
-                atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
-            break;
+        case RV_CSR_mip: *rdata = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed); break;
         case RV_CSR_mideleg: *rdata = cpu->csr.mideleg; break;
         case RV_CSR_medeleg: *rdata = cpu->csr.medeleg; break;
         case RV_CSR_mtvec: *rdata = cpu->csr.mtvec; break;
@@ -62,9 +58,7 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_sstatus: *rdata = cpu->csr.mstatus & RV_SSTATUS_MASK; break;
         case RV_CSR_sie: *rdata = cpu->csr.sie; break;
         case RV_CSR_sip:
-            *rdata =
-                atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) &
-                cpu->csr.mideleg;
+            *rdata = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) & cpu->csr.mideleg;
             break;
         case RV_CSR_stvec: *rdata = cpu->csr.stvec; break;
         case RV_CSR_scause: *rdata = cpu->csr.scause; break;
@@ -72,8 +66,7 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_sepc: *rdata = cpu->csr.sepc; break;
         case RV_CSR_sscratch: *rdata = cpu->csr.sscratch; break;
         case RV_CSR_satp:
-            if (cpu->privilege == 1 &&
-                ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
+            if (cpu->privilege == 1 && ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
                 return false;
             }
             *rdata = cpu->csr.satp;
@@ -107,12 +100,9 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
                 *rdata = cpu->csr.pmpcfg.packed[(index - RV_CSR_pmpcfg0) / 2];
             } else if (index >= RV_CSR_pmpaddr0 && index <= RV_CSR_pmpaddr63) {
                 int     addr_idx = index - RV_CSR_pmpaddr0;
-                uint8_t a        = (cpu->csr.pmpcfg.unpacked[addr_idx] >>
-                             RV_PMPCFG_A_BASE_BIT) &
-                            3;
+                uint8_t a        = (cpu->csr.pmpcfg.unpacked[addr_idx] >> RV_PMPCFG_A_BASE_BIT) & 3;
                 if (a == RV_PMP_ADDR_MATCH_NAPOT) {
-                    *rdata =
-                        cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_NAPOT_MASK;
+                    *rdata = cpu->csr.pmpaddr[addr_idx] | RV_PMPGRAIN_NAPOT_MASK;
                 } else {
                     *rdata = cpu->csr.pmpaddr[addr_idx] & ~RV_PMPGRAIN_OFF_MASK;
                 }
@@ -152,8 +142,12 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                 old     = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
                 desired = (old & ~RV_SIP_WMASK) | (wdata & RV_SIP_WMASK);
             } while (!atomic_compare_exchange_weak_explicit(
-                &cpu->irq_pending, &old, desired,
-                memory_order_relaxed, memory_order_relaxed));
+                &cpu->irq_pending,
+                &old,
+                desired,
+                memory_order_relaxed,
+                memory_order_relaxed
+            ));
             break;
         }
         case RV_CSR_mideleg: cpu->csr.mideleg = wdata; break;
@@ -178,8 +172,12 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                 old     = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed);
                 desired = (old & ~mask) | (wdata & mask);
             } while (!atomic_compare_exchange_weak_explicit(
-                &cpu->irq_pending, &old, desired,
-                memory_order_relaxed, memory_order_relaxed));
+                &cpu->irq_pending,
+                &old,
+                desired,
+                memory_order_relaxed,
+                memory_order_relaxed
+            ));
             break;
         }
         case RV_CSR_stvec: cpu->csr.stvec = wdata; break;
@@ -188,9 +186,19 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
         case RV_CSR_sepc: cpu->csr.sepc = wdata; break;
         case RV_CSR_sscratch: cpu->csr.sscratch = wdata; break;
         case RV_CSR_satp:
-            if (cpu->privilege == 1 &&
-                ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
+            if (cpu->privilege == 1 && ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
                 return false;
+            }
+            {
+                uint64_t mode = (wdata & RV_SATP_MODE_MASK) >> RV_SATP_MODE_BASE_BIT;
+                if (mode != 8 && mode != 0) {
+                    // Unsupported mode is not written.
+                    break;
+                }
+            }
+            if ((wdata & RV_SATP_MODE_MASK) >> RV_SATP_MODE_BASE_BIT != 8) {
+                // Disabling paging here; TLB flush.
+                rv_flush_tlb(cpu);
             }
             cpu->csr.satp = wdata;
             break;
@@ -232,14 +240,10 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
                     // supported. TOR (0b01) → OFF; NA4 (0b10) → NAPOT (grain ≥
                     // 4 makes NA4 unselectable).
                     uint8_t a        = (new_byte >> RV_PMPCFG_A_BASE_BIT) & 3;
-                    new_byte =
-                        (new_byte & (uint8_t)~(3 << RV_PMPCFG_A_BASE_BIT)) |
-                        (uint8_t)((a & 2 ? 3 : 0) << RV_PMPCFG_A_BASE_BIT);
+                    new_byte         = (new_byte & (uint8_t)~(3 << RV_PMPCFG_A_BASE_BIT)) |
+                               (uint8_t)((a & 2 ? 3 : 0) << RV_PMPCFG_A_BASE_BIT);
                     // Locked bytes are not modified.
-                    result |=
-                        (uint64_t)(old_byte & (1 << RV_PMPCFG_L_BIT) ? old_byte
-                                                                     : new_byte)
-                        << (b * 8);
+                    result |= (uint64_t)(old_byte & (1 << RV_PMPCFG_L_BIT) ? old_byte : new_byte) << (b * 8);
                 }
                 cpu->csr.pmpcfg.packed[packed_idx] = result;
             } else if (index >= RV_CSR_pmpaddr0 && index <= 0x3EF) {

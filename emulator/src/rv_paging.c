@@ -10,6 +10,8 @@
 #include "rv_pmp.h"
 #include "rv_privileged.h"
 
+#include <stddef.h>
+
 
 
 // Look up a page-table entry without using the TLB.
@@ -25,17 +27,17 @@ enum rv_mem_result rv_paging_raw_lookup(
         setfl = 1 << RV_PTE_A_BIT;
     }
 
-    uint64_t satp_asid = (cpu->csr.satp & RV_SATP_ASID_MASK) << RV_SATP_ASID_BASE_BIT;
+    uint64_t satp_asid = (cpu->csr.satp & RV_SATP_ASID_MASK) >> RV_SATP_ASID_BASE_BIT;
     uint64_t vpn       = vaddr / RV_CPU_PAGE_SIZE;
     uint64_t ppn       = cpu->csr.satp & RV_SATP_PPN_MASK;
 
     for (int level = 2; level >= 0; level--) {
-        uint64_t vpn_part = (vpn >> (9 * (2 - level))) & 0x1ff;
+        uint64_t vpn_part = (vpn >> (9 * level)) & 0x1ff;
         uint64_t pte;
         uint64_t pte_paddr = ppn * RV_CPU_PAGE_SIZE + vpn_part * 8;
 
         uint8_t pte_pmp = rv_pmp_check(machine, cpu, pte_paddr, 8, false);
-        if ((pte_pmp & RV_PMPCFG_R_BIT) == 0) {
+        if ((pte_pmp & (1 << RV_PMPCFG_R_BIT)) == 0) {
             return RV_MEM_ACCESS_FAULT;
         }
         res = rv_access_phys(machine, cpu, pte_paddr, &pte, 3, RV_ACCESS_LOAD, true);
@@ -46,7 +48,7 @@ enum rv_mem_result rv_paging_raw_lookup(
         if ((pte & (1 << RV_PTE_V_BIT)) == 0) {
             // Nothing mapped.
             *out = (struct rv_tlb_entry){0};
-            return true;
+            return RV_MEM_OK;
         }
 
         uint64_t next_ppn = (pte & RV_PTE_PPN_MASK) >> RV_PTE_PPN_BASE_BIT;
@@ -57,7 +59,7 @@ enum rv_mem_result rv_paging_raw_lookup(
                 return RV_MEM_PAGE_FAULT;
             }
             if ((pte & setfl) != setfl) {
-                if ((pte_pmp & RV_PMPCFG_W_BIT) == 0) {
+                if ((pte_pmp & (1 << RV_PMPCFG_W_BIT)) == 0) {
                     // Couldn't write to the PTE.
                     return RV_MEM_ACCESS_FAULT;
                 }
@@ -112,7 +114,7 @@ enum rv_mem_result rv_paging_lookup(
         // TODO: TLB support for hugepages?
         if ((entry->vma & RV_TLB_VPN_MASK) == (vaddr & RV_TLB_VPN_MASK)) {
             uint16_t entry_asid = (entry->vma & RV_TLB_ASID_MASK) >> RV_TLB_ASID_BASE_BIT;
-            if ((entry->pte & RV_PTE_G_BIT) == 0 && entry_asid != satp_asid) {
+            if ((entry->pte & (1 << RV_PTE_G_BIT)) == 0 && entry_asid != satp_asid) {
                 // Non-global entry with different ASID.
                 continue;
             }
@@ -134,7 +136,7 @@ enum rv_mem_result rv_paging_lookup(
     if (res != RV_MEM_OK) {
         return res;
     }
-    if ((out->pte & RV_PTE_V_BIT) == 0) {
+    if ((out->pte & (1 << RV_PTE_V_BIT)) == 0) {
         // No faults, but invalid PTE.
         return RV_MEM_OK;
     }
@@ -145,7 +147,7 @@ enum rv_mem_result rv_paging_lookup(
             struct rv_tlb_entry *entry  = &cpu->tlb.entries[row * RV_TLB_COLUMNS + col];
             *entry                      = *out;
             cpu->tlb.valid[row]        |= 1 << col;
-            return true;
+            return RV_MEM_OK;
         }
     }
 
@@ -183,7 +185,7 @@ static enum rv_mem_result check_access(struct rv_tlb_entry entry, enum rv_access
             }
             break;
     }
-    __builtin_unreachable();
+    return RV_MEM_OK;
 }
 
 // Implementation of `rv_access_virt` for accesses spanning page boundaries.
@@ -194,7 +196,7 @@ static inline enum rv_mem_result rv_access_virt_pageboundary(
     struct rv_tlb_entry result0;
     struct rv_tlb_entry result1;
     size_t              size   = 1 << size_exp;
-    uint64_t            vaddr1 = vaddr / RV_CPU_PAGE_SIZE * RV_CPU_PAGE_SIZE + 1;
+    uint64_t            vaddr1 = (vaddr / RV_CPU_PAGE_SIZE + 1) * RV_CPU_PAGE_SIZE;
     size_t              size0  = vaddr1 - vaddr;
     size_t              size1  = vaddr + size - vaddr1;
 
@@ -238,7 +240,7 @@ static inline enum rv_mem_result rv_access_virt_pageboundary(
         return res;
     }
 
-    return true;
+    return RV_MEM_OK;
 }
 
 // Access virtual memory.
@@ -259,7 +261,7 @@ enum rv_mem_result rv_access_virt(
     size_t              size   = 1 << size_exp;
     uint64_t            vaddr1 = vaddr + size - 1;
 
-    if (vaddr % RV_CPU_PAGE_SIZE != vaddr1 % RV_CPU_PAGE_SIZE) {
+    if (vaddr / RV_CPU_PAGE_SIZE != vaddr1 / RV_CPU_PAGE_SIZE) {
         // Crossess a page boundary; two lookups needed.
         return rv_access_virt_pageboundary(machine, cpu, vaddr, data, size_exp, mode);
     }
@@ -279,6 +281,59 @@ enum rv_mem_result rv_access_virt(
     uint64_t ppn   = (result.pte & RV_PTE_PPN_MASK) >> RV_PTE_PPN_BASE_BIT;
     uint64_t paddr = ppn << RV_CPU_PAGE_SIZE_EXP | vaddr % RV_CPU_PAGE_SIZE;
     return rv_access_phys(machine, cpu, paddr, data, size_exp, mode, true);
+}
+
+// Clear the entire TLB.
+void rv_flush_tlb(struct rv_cpu *cpu) {
+    for (size_t row = 0; row < RV_TLB_ROWS; row++) {
+        cpu->tlb.valid[row] = 0;
+    }
+}
+
+// Invalidate all entries with the ASID.
+void rv_inval_tlb_asid(struct rv_cpu *cpu, uint16_t asid) {
+    for (size_t row = 0; row < RV_TLB_ROWS; row++) {
+        for (size_t col = 0; col < RV_TLB_COLUMNS; col++) {
+            uint64_t vma      = cpu->tlb.entries[row * RV_TLB_COLUMNS + col].vma;
+            uint16_t vma_asid = (vma & RV_TLB_ASID_MASK) >> RV_TLB_ASID_BASE_BIT;
+            if (vma_asid == asid) {
+                cpu->tlb.valid[row] &= ~(1 << col);
+            }
+        }
+    }
+}
+
+// Invalidate a specific virtual address.
+void rv_inval_tlb_vaddr(struct rv_cpu *cpu, uint64_t vaddr, uint16_t asid, bool with_asid) {
+    size_t   row   = vaddr / RV_CPU_PAGE_SIZE % RV_TLB_ROWS;
+    uint64_t mask  = RV_TLB_VPN_MASK;
+    uint64_t match = vaddr & RV_TLB_VPN_MASK;
+    if (with_asid) {
+        mask  |= RV_TLB_ASID_MASK;
+        match |= (uint64_t)asid << RV_TLB_ASID_BASE_BIT;
+    }
+
+    for (size_t col = 0; col < RV_TLB_COLUMNS; col++) {
+        uint64_t vma = cpu->tlb.entries[row * RV_TLB_COLUMNS + col].vma;
+        if ((vma & mask) == match) {
+            cpu->tlb.valid[row] &= ~(1 << col);
+        }
+    }
+}
+
+// Invalidate matching TLB entries.
+void rv_inval_tlb(struct rv_cpu *cpu, uint64_t vaddr, uint16_t asid, bool with_vaddr, bool with_asid) {
+    if (with_vaddr && !rv_is_canon_vaddr(cpu, vaddr)) {
+        // Either paging is disabled and the TLB is already empty, or this non-canonical virtual address can't be in it.
+        return;
+    }
+    if (with_vaddr) {
+        rv_inval_tlb_vaddr(cpu, vaddr, asid, with_asid);
+    } else if (with_asid) {
+        rv_inval_tlb_asid(cpu, asid);
+    } else {
+        rv_flush_tlb(cpu);
+    }
 }
 
 // Whether a virtual address is canonical.

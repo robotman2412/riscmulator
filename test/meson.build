@@ -10,6 +10,7 @@ test_src = files(
     'src/op.c',
     'src/clint.c',
     'src/plic.c',
+    'src/paging.c',
     'src/pmp.c',
     'src/riscv_tests.c',
     'src/softfloat.c',
