@@ -106,34 +106,34 @@ void rv_base_load(
     uint64_t rdata = 0;
     switch (RV_INSN_FUNCT3(insn)) {
         case 0:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD, false))
                 return;
             rdata = (uint64_t)(int64_t)(int8_t)rdata;
             break;
         case 1:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD, false))
                 return;
             rdata = (uint64_t)(int64_t)(int16_t)rdata;
             break;
         case 2:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD, false))
                 return;
             rdata = (uint64_t)(int64_t)(int32_t)rdata;
             break;
         case 3:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD, false))
                 return;
             break;
         case 4:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD, false))
                 return;
             break;
         case 5:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD, false))
                 return;
             break;
         case 6:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD))
+            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD, false))
                 return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
@@ -173,19 +173,19 @@ void rv_base_store(
 
     switch (RV_INSN_FUNCT3(insn) & 3) {
         case 0:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE))
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE, false))
                 return;
             break;
         case 1:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE))
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE, false))
                 return;
             break;
         case 2:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE))
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE, false))
                 return;
             break;
         case 3:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE))
+            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE, false))
                 return;
             break;
         default: rv_do_iillegal(machine, cpu, insn); return;
@@ -295,6 +295,39 @@ void rv_base_system(
         cpu->csr.mstatus |= mpie << RV_STATUS_MIE_BIT;
         cpu->privilege    = (cpu->csr.mstatus >> RV_STATUS_MPP_BASE_BIT) & 3;
         cpu->pc           = cpu->csr.mepc;
+    } else if (insn == 0x10200073) {
+        // sret: S-mode or higher required; TSR=1 in S-mode traps
+        if (cpu->privilege < 1 ||
+            (cpu->privilege == 1 &&
+             ((cpu->csr.mstatus >> RV_STATUS_TSR_BIT) & 1))) {
+            rv_do_iillegal(machine, cpu, insn);
+            return;
+        }
+        uint64_t spp      = (cpu->csr.mstatus >> RV_STATUS_SPP_BIT) & 1;
+        bool spie         = (cpu->csr.mstatus >> RV_STATUS_SPIE_BIT) & 1;
+        cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SIE_BIT);
+        cpu->csr.mstatus |= (uint64_t)spie << RV_STATUS_SIE_BIT;
+        cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SPP_BIT);
+        cpu->csr.mstatus |= UINT64_C(1) << RV_STATUS_SPIE_BIT;
+        cpu->privilege    = (uint8_t)spp;
+        cpu->pc           = cpu->csr.sepc;
+    } else if (insn == 0x10500073) {
+        // wfi: illegal if TW=1 and below M-mode; otherwise NOP/yield
+        if (cpu->privilege < 3 &&
+            ((cpu->csr.mstatus >> RV_STATUS_TW_BIT) & 1)) {
+            rv_do_iillegal(machine, cpu, insn);
+            return;
+        }
+        sched_yield();
+    } else if ((insn >> 25) == 0x09) {
+        // sfence.vma: requires at least S-mode; TVM=1 in S-mode traps
+        if (cpu->privilege < 1 ||
+            (cpu->privilege == 1 &&
+             ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1))) {
+            rv_do_iillegal(machine, cpu, insn);
+            return;
+        }
+        // No virtual memory yet; serves as a TLB-flush NOP.
     } else if (insn == 0x00000073) {
         // ecall
         enum rv_cause cause;

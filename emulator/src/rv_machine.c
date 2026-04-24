@@ -32,16 +32,10 @@ static void *cpu_thread(void *arg) {
     return nullptr;
 }
 
-bool rv_machine_init(
-    struct rv_machine *machine,
-    size_t             cpu_count,
-    uint64_t           ram_start,
-    size_t             ram_size
-) {
+bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size) {
     struct rv_cpu         *cpus = calloc(cpu_count, sizeof(struct rv_cpu));
-    struct rv_reservation *resv =
-        calloc(cpu_count, sizeof(struct rv_reservation));
-    uint8_t *ram = calloc(1, ram_size);
+    struct rv_reservation *resv = calloc(cpu_count, sizeof(struct rv_reservation));
+    uint8_t               *ram  = calloc(1, ram_size);
 
     if (!cpus || !resv || !ram) {
         free(cpus);
@@ -66,9 +60,8 @@ bool rv_machine_init(
 }
 
 void rv_machine_run(struct rv_machine *machine) {
-    pthread_t *threads = malloc(machine->cpu_count * sizeof(pthread_t));
-    struct cpu_thread_arg *args =
-        malloc(machine->cpu_count * sizeof(struct cpu_thread_arg));
+    pthread_t             *threads = malloc(machine->cpu_count * sizeof(pthread_t));
+    struct cpu_thread_arg *args    = malloc(machine->cpu_count * sizeof(struct cpu_thread_arg));
 
     for (size_t i = 0; i < machine->cpu_count; i++) {
         args[i].machine = machine;
@@ -101,11 +94,9 @@ void rv_machine_destroy(struct rv_machine *machine) {
 }
 
 bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region) {
-    struct rv_mmio_region *arr = realloc(
-        machine->mmio,
-        (machine->mmio_count + 1) * sizeof(struct rv_mmio_region)
-    );
-    if (!arr) return false;
+    struct rv_mmio_region *arr = realloc(machine->mmio, (machine->mmio_count + 1) * sizeof(struct rv_mmio_region));
+    if (!arr)
+        return false;
     machine->mmio                        = arr;
     machine->mmio[machine->mmio_count++] = region;
     return true;
@@ -123,7 +114,8 @@ static bool mmio_dispatch(
     uint8_t                size,
     enum rv_access         mode
 ) {
-    if (!data) return true;
+    if (!data)
+        return true;
 
     bool ok;
     if (mode == RV_ACCESS_STORE) {
@@ -133,7 +125,8 @@ static bool mmio_dispatch(
     } else {
         uint64_t val = 0;
         ok           = r->read(r->device, addr - r->base, size, &val);
-        if (ok) memcpy(data, &val, size);
+        if (ok)
+            memcpy(data, &val, size);
     }
 
     if (!ok) {
@@ -144,11 +137,7 @@ static bool mmio_dispatch(
             case RV_ACCESS_AMO:
             case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
         }
-        rv_do_trap(
-            machine,
-            cpu,
-            (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr}
-        );
+        rv_do_trap(machine, cpu, (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr});
         return false;
     }
     return true;
@@ -156,12 +145,7 @@ static bool mmio_dispatch(
 
 // Implementation of misaligned accesses.
 static bool misaligned_access(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    uint64_t          *data,
-    size_t             size,
-    enum rv_access     mode
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, uint64_t *data, size_t size, enum rv_access mode
 ) {
     // Loop (partial) accesses until done.
     while (size) {
@@ -185,8 +169,7 @@ static bool misaligned_access(
             // Not in RAM — try MMIO.
             struct rv_mmio_region *r = nullptr;
             for (size_t i = 0; i < machine->mmio_count; i++) {
-                if (addr >= machine->mmio[i].base &&
-                    addr < machine->mmio[i].base + machine->mmio[i].size) {
+                if (addr >= machine->mmio[i].base && addr < machine->mmio[i].base + machine->mmio[i].size) {
                     r = &machine->mmio[i];
                     break;
                 }
@@ -199,11 +182,7 @@ static bool misaligned_access(
                     case RV_ACCESS_AMO:
                     case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
                 }
-                rv_do_trap(
-                    machine,
-                    cpu,
-                    (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr}
-                );
+                rv_do_trap(machine, cpu, (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr});
                 return false;
             }
             uint64_t part = size;
@@ -221,13 +200,8 @@ static bool misaligned_access(
     return true;
 }
 
-static inline bool do_pmp_check(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    size_t             size,
-    enum rv_access     mode
-) {
+static inline bool
+    do_pmp_check(struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, size_t size, enum rv_access mode) {
     uint8_t perm = rv_pmp_check(machine, cpu, addr, size, cpu->privilege == 3);
 
     bool          ok;
@@ -270,9 +244,10 @@ bool rv_access_phys_partial(
     uint64_t           addr,
     void              *data,
     size_t             size,
-    enum rv_access     mode
+    enum rv_access     mode,
+    bool               ignore_pmp
 ) {
-    return do_pmp_check(machine, cpu, addr, size, mode) &&
+    return (ignore_pmp || do_pmp_check(machine, cpu, addr, size, mode)) &&
            // The first checks the access permissions,
            misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
            // the second actually commits to the access.
@@ -286,11 +261,12 @@ bool rv_access_phys(
     uint64_t           addr,
     void              *data,
     uint8_t            size_exp,
-    enum rv_access     mode
+    enum rv_access     mode,
+    bool               ignore_pmp
 ) {
     uint64_t size = UINT64_C(1) << size_exp;
 
-    if (!do_pmp_check(machine, cpu, addr, size, mode)) {
+    if (!ignore_pmp && !do_pmp_check(machine, cpu, addr, size, mode)) {
         return false;
     }
 

@@ -15,9 +15,7 @@
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
 // for jumps and branches.
-void rv_forcefeed_insn(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     switch (RV_INSN_OP_MAJ(insn)) {
         case RV_OP_MAJ_OP:
         case RV_OP_MAJ_OP_IMM:
@@ -47,7 +45,8 @@ void rv_forcefeed_insn(
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
     uint16_t hw;
-    if (!rv_access_phys(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN)) return;
+    if (!rv_access_phys(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN, false))
+        return;
 
     uint32_t insn;
     if ((hw & 0x3u) != 0x3u) {
@@ -63,11 +62,13 @@ void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
         // Full 32-bit instruction: fetch the upper halfword.
         uint16_t hw2;
         uint64_t pc2 = cpu->pc + 2;
-        if (!rv_access_phys(machine, cpu, pc2, &hw2, 1, RV_ACCESS_INSN)) return;
+        if (!rv_access_phys(machine, cpu, pc2, &hw2, 1, RV_ACCESS_INSN, false))
+            return;
         insn      = (uint32_t)hw | ((uint32_t)hw2 << 16);
         cpu->epc  = cpu->pc;
         cpu->pc  += 4;
     }
 
     rv_forcefeed_insn(machine, cpu, insn);
+    rv_check_interrupts(machine, cpu);
 }

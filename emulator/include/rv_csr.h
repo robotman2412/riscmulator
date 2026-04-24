@@ -85,6 +85,9 @@ enum rv_xstate {
 #define RV_STATUS_MPRV_BIT     17
 #define RV_STATUS_SUM_BIT      18
 #define RV_STATUS_MXR_BIT      19
+#define RV_STATUS_TVM_BIT      20
+#define RV_STATUS_TW_BIT       21
+#define RV_STATUS_TSR_BIT      22
 #define RV_STATUS_UXL_BASE_BIT 32 // ,33
 #define RV_STATUS_SXL_BASE_BIT 34 // ,35
 
@@ -101,7 +104,8 @@ enum rv_xstate {
      (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
      (uint64_t)3 << RV_STATUS_XS_BASE_BIT |                                    \
      (uint64_t)1 << RV_STATUS_MPRV_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT |    \
-     (uint64_t)1 << RV_STATUS_MXR_BIT)
+     (uint64_t)1 << RV_STATUS_MXR_BIT | (uint64_t)1 << RV_STATUS_TVM_BIT |     \
+     (uint64_t)1 << RV_STATUS_TW_BIT | (uint64_t)1 << RV_STATUS_TSR_BIT)
 
 #define RV_SSTATUS_MASK                                                        \
     ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |    \
@@ -146,7 +150,7 @@ enum rv_xstate {
 
 // Bits writable via mip or sip CSR writes (hardware owns MSIP, MTIP, MEIP).
 #define RV_SIP_WMASK                                                           \
-    ((UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_STIP_BIT) |   \
+    ((UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_STIP_BIT) |     \
      (UINT64_C(1) << RV_MIP_SEIP_BIT))
 
 // PMP configuration byte bit fields.
@@ -164,8 +168,15 @@ enum rv_xstate {
 #define RV_PMPCFG_BYTE_MASK     0x9F
 // In NAPOT mode, pmpaddr bits [G-2:0] read as all-ones.
 #define RV_PMPGRAIN_NAPOT_MASK  ((1ULL << (RV_PMPGRAIN - 1)) - 1)
-// In OFF/TOR mode, pmpaddr bits [G-1:0] read as all-zeros (one more bit than NAPOT).
+// In OFF/TOR mode, pmpaddr bits [G-1:0] read as all-zeros (one more bit than
+// NAPOT).
 #define RV_PMPGRAIN_OFF_MASK    ((1ULL << RV_PMPGRAIN) - 1)
+
+#define RV_SATP_MODE_BASE_BIT 60
+#define RV_SATP_ASID_BASE_BIT 44
+#define RV_SATP_MODE_MASK     UINT64_C(0xf000000000000000)
+#define RV_SATP_ASID_MASK     UINT64_C(0x0ffff00000000000)
+#define RV_SATP_PPN_MASK      UINT64_C(0x00000fffffffffff)
 
 // Get the name of a CSR; returns `nullptr` if invalid.
 [[gnu::const]] char const *rv_csr_to_name(enum rv_csr csr);

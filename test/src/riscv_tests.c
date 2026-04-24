@@ -2,6 +2,7 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
+#include "rv_clint.h"
 #include "rv_cpu.h"
 #include "rv_machine.h"
 #include "rv_privileged.h"
@@ -160,7 +161,7 @@ RISCV_TEST1(rv64si, sbreak)
 // RISCV_TEST1(rv64mi, breakpoint) // Not supported.
 RISCV_TEST1(rv64mi, csr)
 RISCV_TEST1(rv64mi, mcsr)
-// RISCV_TEST1(rv64mi, illegal) // TODO: Interrupt infra.
+RISCV_TEST1(rv64mi, illegal)
 RISCV_TEST1(rv64mi, ma_fetch)
 RISCV_TEST1(rv64mi, ma_addr)
 // RISCV_TEST1(rv64mi, scall) // Broken test.
@@ -389,6 +390,14 @@ static bool do_riscv_test(
     fread(machine->ram, 1, len, f);
     fclose(f);
 
+    // Attach a CLINT so the CPU gets periodic timer interrupts (MTIP).
+    // This lets WFI implementations that block-on-irq exit cleanly.
+    static uint64_t const TIMER_PERIOD = 1000; // CLINT ticks (0.1 ms each)
+    struct rv_clint clint              = {0};
+    rv_clint_init(&clint, machine);
+    machine->clint = &clint;
+    rv_clint_set_mtimecmp(&clint, 0, rv_clint_mtime(&clint) + TIMER_PERIOD);
+
     struct riscv_test_state st = {0};
 
     machine->hook_cookie = &st;
@@ -402,6 +411,17 @@ static bool do_riscv_test(
     uint64_t cyc = 0;
     while (!st.finished) {
         rv_step_insn(machine, cpu);
+        // Drive the CLINT timer; re-arm immediately after each fire so the
+        // interrupt source stays periodic across the entire test run.
+        if (atomic_load_explicit(
+                &cpu->clint_timer_armed, memory_order_relaxed)) {
+            rv_clint_check_timer(&clint, cpu);
+            if (!atomic_load_explicit(
+                    &cpu->clint_timer_armed, memory_order_relaxed)) {
+                rv_clint_set_mtimecmp(
+                    &clint, 0, rv_clint_mtime(&clint) + TIMER_PERIOD);
+            }
+        }
         if ((cpu->xregs[3] & 1337) == 1337) {
             printf(
                 "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64
@@ -421,6 +441,8 @@ static bool do_riscv_test(
     }
 
     machine->hook_cookie = nullptr;
+    rv_clint_destroy(&clint);
+    machine->clint = nullptr;
 
     if (st.failure) {
         printf("\033[34m");

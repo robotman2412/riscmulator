@@ -9,6 +9,17 @@
 struct rv_cpu;
 struct rv_machine;
 
+// High bit in mcause indicating an interrupt (vs. synchronous exception).
+#define RV_CAUSE_INTR_FLAG UINT64_C(0x8000000000000000)
+
+// Interrupt cause codes (OR with RV_CAUSE_INTR_FLAG to get the mcause value).
+#define RV_INTR_SSIP 1  // Supervisor software interrupt
+#define RV_INTR_MSIP 3  // Machine software interrupt
+#define RV_INTR_STIP 5  // Supervisor timer interrupt
+#define RV_INTR_MTIP 7  // Machine timer interrupt
+#define RV_INTR_SEIP 9  // Supervisor external interrupt
+#define RV_INTR_MEIP 11 // Machine external interrupt
+
 // RISC-V trap causes.
 enum rv_cause {
     // Instruction address misaligned.
@@ -63,3 +74,6 @@ void rv_do_trap(
 void rv_do_iillegal(
     struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
 );
+// Check for pending interrupts and dispatch the highest-priority one.
+// Must be called after each instruction step.
+void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu);

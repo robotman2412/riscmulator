@@ -71,7 +71,13 @@ bool rv_csr_read(struct rv_cpu *cpu, uint32_t index, uint64_t *rdata) {
         case RV_CSR_stval: *rdata = cpu->csr.stval; break;
         case RV_CSR_sepc: *rdata = cpu->csr.sepc; break;
         case RV_CSR_sscratch: *rdata = cpu->csr.sscratch; break;
-        case RV_CSR_satp: *rdata = cpu->csr.satp; break;
+        case RV_CSR_satp:
+            if (cpu->privilege == 1 &&
+                ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
+                return false;
+            }
+            *rdata = cpu->csr.satp;
+            break;
 
         case RV_CSR_fcsr:
             if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
@@ -182,8 +188,10 @@ bool rv_csr_write(struct rv_cpu *cpu, uint32_t index, uint64_t wdata) {
         case RV_CSR_sepc: cpu->csr.sepc = wdata; break;
         case RV_CSR_sscratch: cpu->csr.sscratch = wdata; break;
         case RV_CSR_satp:
-            // TODO: Notify other virtual-memory structures as needed (e.g.
-            // ASID, root PPN).
+            if (cpu->privilege == 1 &&
+                ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1)) {
+                return false;
+            }
             cpu->csr.satp = wdata;
             break;
 
