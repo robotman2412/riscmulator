@@ -11,9 +11,7 @@
 
 #include <stdint.h>
 
-void rv_muldiv_op(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool    is_32  = RV_INSN_OP_MAJ(insn) & 0b00010;
     uint8_t funct3 = RV_INSN_FUNCT3(insn);
 
@@ -55,9 +53,8 @@ void rv_muldiv_op(
         }
 
         case 3: { // MULHU: upper 64 bits of unsigned*unsigned
-            unsigned __int128 prod =
-                (unsigned __int128)rs1 * (unsigned __int128)rs2;
-            res = (uint64_t)(prod >> 64);
+            unsigned __int128 prod = (unsigned __int128)rs1 * (unsigned __int128)rs2;
+            res                    = (uint64_t)(prod >> 64);
             break;
         }
 

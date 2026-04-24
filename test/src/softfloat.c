@@ -6,7 +6,7 @@
 #include "testcase.h"
 
 // 2.5f in IEEE 754 single precision: sign=0, exp=128 (2^1), mantissa=1.01b.
-#define F32_2_5 ((float32_t){ .v = 0x40200000u })
+#define F32_2_5 ((float32_t){.v = 0x40200000u})
 
 // RNE rounds 2.5 to 2 (nearest even); RMM rounds 2.5 to 3 (away from zero).
 TESTCASE_NOMACHINE(softfloat_rmm_tiebreak, {

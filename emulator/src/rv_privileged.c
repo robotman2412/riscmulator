@@ -8,14 +8,13 @@
 #include "rv_csr.h"
 #include "rv_machine.h"
 
-#include <assert.h>
 #include <stdatomic.h>
+
+#include <assert.h>
 
 // Execute a certain trap handler.
 // trap.cause < 32 for synchronous exceptions; bit 63 set for interrupts.
-void rv_do_trap(
-    struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap
-) {
+void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     bool     is_interrupt = (trap.cause >> 63) != 0;
     uint64_t cause_low    = trap.cause & 0x3f;
 
@@ -44,8 +43,7 @@ void rv_do_trap(
         cpu->privilege    = 1;
         uint64_t base     = cpu->csr.stvec & ~UINT64_C(3);
         // Vectored mode: interrupts jump to BASE + 4*cause; exceptions go to BASE.
-        cpu->pc = (is_interrupt && (cpu->csr.stvec & 1)) ? base + 4 * cause_low
-                                                         : base;
+        cpu->pc           = (is_interrupt && (cpu->csr.stvec & 1)) ? base + 4 * cause_low : base;
     } else {
         // Execute handler in M-mode.
         cpu->csr.mepc     = trap.epc;
@@ -60,15 +58,12 @@ void rv_do_trap(
         cpu->privilege    = 3;
         uint64_t base     = cpu->csr.mtvec & ~UINT64_C(3);
         // Vectored mode: interrupts jump to BASE + 4*cause; exceptions go to BASE.
-        cpu->pc = (is_interrupt && (cpu->csr.mtvec & 1)) ? base + 4 * cause_low
-                                                         : base;
+        cpu->pc           = (is_interrupt && (cpu->csr.mtvec & 1)) ? base + 4 * cause_low : base;
     }
 }
 
 // Execute the illegal instruction handler.
-void rv_do_iillegal(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_do_iillegal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     rv_do_trap(
         machine,
         cpu,
@@ -82,7 +77,7 @@ void rv_do_iillegal(
 
 // Interrupt priority order per RISC-V privileged spec section 3.1.9:
 // MEI > MSI > MTI > SEI > SSI > STI.
-static const int irq_priority[] = {
+static int const irq_priority[] = {
     RV_INTR_MEIP,
     RV_INTR_MSIP,
     RV_INTR_MTIP,
@@ -93,10 +88,9 @@ static const int irq_priority[] = {
 
 // Check for pending, enabled interrupts and dispatch the highest-priority one.
 void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu) {
-    uint64_t pending =
-        atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) &
-        cpu->csr.mie;
-    if (!pending) return;
+    uint64_t pending = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) & cpu->csr.mie;
+    if (!pending)
+        return;
 
     uint64_t mstatus = cpu->csr.mstatus;
     uint64_t mideleg = cpu->csr.mideleg;
@@ -104,15 +98,12 @@ void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu) {
     // M-mode interrupts: not delegated to S-mode, taken when either running
     // below M-mode (always preemptible) or in M-mode with MIE enabled.
     uint64_t m_pending = pending & ~mideleg;
-    bool m_enabled =
-        (cpu->privilege < 3) || ((mstatus >> RV_STATUS_MIE_BIT) & 1);
+    bool     m_enabled = (cpu->privilege < 3) || ((mstatus >> RV_STATUS_MIE_BIT) & 1);
 
     // S-mode interrupts: delegated to S-mode, taken when either running below
     // S-mode or in S-mode with SIE enabled.
     uint64_t s_pending = pending & mideleg;
-    bool s_enabled =
-        (cpu->privilege < 1) ||
-        (cpu->privilege == 1 && ((mstatus >> RV_STATUS_SIE_BIT) & 1));
+    bool     s_enabled = (cpu->privilege < 1) || (cpu->privilege == 1 && ((mstatus >> RV_STATUS_SIE_BIT) & 1));
 
     // M-mode takes priority over S-mode.
     uint64_t take = 0;
@@ -132,7 +123,8 @@ void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu) {
             break;
         }
     }
-    if (cause_bit < 0) return;
+    if (cause_bit < 0)
+        return;
 
     rv_do_trap(
         machine,

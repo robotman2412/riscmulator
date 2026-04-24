@@ -8,18 +8,18 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 // Assert that rv_decompress(in) succeeds and equals expected.
-#define DECOMP_OK(in, expected)                       \
-    {                                                  \
-        uint32_t out_ = 0;                             \
-        TEST_ASSERT(rv_decompress((in), &out_));       \
-        TEST_ASSERT(out_ == (uint32_t)(expected));     \
+#define DECOMP_OK(in, expected)                                                                                        \
+    {                                                                                                                  \
+        uint32_t out_ = 0;                                                                                             \
+        TEST_ASSERT(rv_decompress((in), &out_));                                                                       \
+        TEST_ASSERT(out_ == (uint32_t)(expected));                                                                     \
     }
 
 // Assert that rv_decompress(in) returns false (illegal encoding).
-#define DECOMP_ILLEGAL(in)                             \
-    {                                                  \
-        uint32_t out_ = 0;                             \
-        TEST_ASSERT(!rv_decompress((in), &out_));      \
+#define DECOMP_ILLEGAL(in)                                                                                             \
+    {                                                                                                                  \
+        uint32_t out_ = 0;                                                                                             \
+        TEST_ASSERT(!rv_decompress((in), &out_));                                                                      \
     }
 
 // ── Quadrant 0 ───────────────────────────────────────────────────────────────

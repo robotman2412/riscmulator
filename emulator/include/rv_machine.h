@@ -40,15 +40,15 @@ enum rv_mem_result {
 static inline enum rv_cause rv_mem_cause(enum rv_mem_result r, enum rv_access mode) {
     if (r == RV_MEM_PAGE_FAULT) {
         switch (mode) {
-            case RV_ACCESS_INSN:  return RV_CAUSE_IPAGE;
-            case RV_ACCESS_LOAD:  return RV_CAUSE_LPAGE;
+            case RV_ACCESS_INSN: return RV_CAUSE_IPAGE;
+            case RV_ACCESS_LOAD: return RV_CAUSE_LPAGE;
             case RV_ACCESS_AMO:
             case RV_ACCESS_STORE: return RV_CAUSE_SPAGE;
         }
     }
     switch (mode) {
-        case RV_ACCESS_INSN:  return RV_CAUSE_IACCESS;
-        case RV_ACCESS_LOAD:  return RV_CAUSE_LACCESS;
+        case RV_ACCESS_INSN: return RV_CAUSE_IACCESS;
+        case RV_ACCESS_LOAD: return RV_CAUSE_LACCESS;
         case RV_ACCESS_AMO:
         case RV_ACCESS_STORE: return RV_CAUSE_SACCESS;
     }

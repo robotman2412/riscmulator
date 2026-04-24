@@ -108,9 +108,7 @@ TESTCASE(mmio_aligned_write, {
 // Access outside both RAM and any MMIO region raises an access fault.
 TESTCASE(mmio_fault_hole, {
     uint64_t data = 0;
-    TEST_ASSERT(
-        rv_access_phys(machine, cpu, 0x30000, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT
-    );
+    TEST_ASSERT(rv_access_phys(machine, cpu, 0x30000, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT);
 })
 
 // A device returning false from its callback causes an access fault.
@@ -143,13 +141,9 @@ TESTCASE(mmio_device_fault, {
     ));
 
     uint64_t data = 0;
-    TEST_ASSERT(
-        rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT
-    );
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT);
     data = 0xDEAD;
-    TEST_ASSERT(
-        rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_STORE, false) == RV_MEM_ACCESS_FAULT
-    );
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_STORE, false) == RV_MEM_ACCESS_FAULT);
 })
 
 // With two regions registered, each access is dispatched to the right device.

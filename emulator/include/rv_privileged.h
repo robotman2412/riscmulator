@@ -67,13 +67,9 @@ struct rv_trap {
 };
 
 // Execute a certain trap handler.
-void rv_do_trap(
-    struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap
-);
+void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
 // Execute the illegal instruction handler.
-void rv_do_iillegal(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-);
+void rv_do_iillegal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 // Check for pending interrupts and dispatch the highest-priority one.
 // Must be called after each instruction step.
 void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu);

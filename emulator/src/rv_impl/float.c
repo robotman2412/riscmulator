@@ -79,10 +79,7 @@ static void apply_frm(struct rv_cpu *cpu, uint32_t insn, bool *is_inexact) {
 // Get float exception flags and set them in the `fflags` CSR.
 static void check_fflags(struct rv_cpu *cpu) {
     fexcept_t flag;
-    fegetexceptflag(
-        &flag,
-        FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW
-    );
+    fegetexceptflag(&flag, FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW);
     if (fetestexceptflag(&flag, FE_INVALID)) {
         cpu->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;
     }
@@ -105,13 +102,13 @@ static void check_fflags(struct rv_cpu *cpu) {
 #define RV_CANONICAL_NAN_F64 UINT64_C(0x7FF8000000000000)
 
 // Canonicalize host NaN to RISC-V canonical NaN (spec §11.3).
-#define CANON_NAN_F32(res)                                                     \
-    if (isnan((res).f_32)) {                                                   \
-        (res).i_32 = RV_CANONICAL_NAN_F32;                                     \
+#define CANON_NAN_F32(res)                                                                                             \
+    if (isnan((res).f_32)) {                                                                                           \
+        (res).i_32 = RV_CANONICAL_NAN_F32;                                                                             \
     }
-#define CANON_NAN_F64(res)                                                     \
-    if (isnan((res).f_64)) {                                                   \
-        (res).i_64 = RV_CANONICAL_NAN_F64;                                     \
+#define CANON_NAN_F64(res)                                                                                             \
+    if (isnan((res).f_64)) {                                                                                           \
+        (res).i_64 = RV_CANONICAL_NAN_F64;                                                                             \
     }
 
 // Read an F32 register with NaN-boxing check.  Returns canonical NaN when the
@@ -119,8 +116,7 @@ static void check_fflags(struct rv_cpu *cpu) {
 static inline union rv_freg rv_freg_read_f32(struct rv_cpu *cpu, uint32_t idx) {
     union rv_freg r = rv_freg_read(cpu, idx);
     if ((r.i_64 >> 32) != 0xFFFFFFFF) {
-        return (union rv_freg){.i_64 =
-                                   0xFFFFFFFF00000000 | RV_CANONICAL_NAN_F32};
+        return (union rv_freg){.i_64 = 0xFFFFFFFF00000000 | RV_CANONICAL_NAN_F32};
     }
     return r;
 }
@@ -131,13 +127,11 @@ static inline union rv_freg rv_freg_read_f32(struct rv_cpu *cpu, uint32_t idx) {
 static inline bool rv_is_snan(union rv_freg r, bool f64) {
     if (f64) {
         // F64: exponent=0x7FF, quiet bit (bit 51) clear, payload non-zero.
-        return (r.i_64 & UINT64_C(0x7FF8000000000000)) ==
-                   UINT64_C(0x7FF0000000000000) &&
+        return (r.i_64 & UINT64_C(0x7FF8000000000000)) == UINT64_C(0x7FF0000000000000) &&
                (r.i_64 & UINT64_C(0x0007FFFFFFFFFFFF)) != 0;
     } else {
         // F32: exponent=0xFF, quiet bit (bit 22) clear, payload non-zero.
-        return (r.i_32 & 0x7FC00000U) == 0x7F800000U &&
-               (r.i_32 & 0x003FFFFFU) != 0;
+        return (r.i_32 & 0x7FC00000U) == 0x7F800000U && (r.i_32 & 0x003FFFFFU) != 0;
     }
 }
 
@@ -145,30 +139,27 @@ static inline bool rv_is_snan(union rv_freg r, bool f64) {
 // `lo`/`hi` are the inclusive-lower / exclusive-upper bounds as double.
 // Sets NV on overflow/NaN; FE_INEXACT from rint is cleared on the overflow path
 // so check_fflags() only sees NX on in-range inexact conversions.
-#define FTOX_HELPER(cpu, res, value, minv, maxv, lo, hi)                       \
-    {                                                                          \
-        if (isnan(value)) {                                                    \
-            (res)            = (maxv);                                         \
-            (cpu)->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;                          \
-        } else {                                                               \
-            double _rv = rint((double)(value));                                \
-            if (!(_rv < (hi)) || !(_rv >= (lo))) {                             \
-                (res)            = _rv < 0.0 ? (minv) : (maxv);                \
-                (cpu)->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;                      \
-                feclearexcept(FE_INEXACT);                                     \
-            } else {                                                           \
-                (res) = _rv;                                                   \
-            }                                                                  \
-        }                                                                      \
+#define FTOX_HELPER(cpu, res, value, minv, maxv, lo, hi)                                                               \
+    {                                                                                                                  \
+        if (isnan(value)) {                                                                                            \
+            (res)            = (maxv);                                                                                 \
+            (cpu)->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;                                                                  \
+        } else {                                                                                                       \
+            double _rv = rint((double)(value));                                                                        \
+            if (!(_rv < (hi)) || !(_rv >= (lo))) {                                                                     \
+                (res)            = _rv < 0.0 ? (minv) : (maxv);                                                        \
+                (cpu)->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;                                                              \
+                feclearexcept(FE_INEXACT);                                                                             \
+            } else {                                                                                                   \
+                (res) = _rv;                                                                                           \
+            }                                                                                                          \
+        }                                                                                                              \
     }
 
-static inline void
-    rv_float_add(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_add(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     union rv_freg res = {.i_64 = UINT64_MAX};
-    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
     if (softfloat && f64) {
         res.sf_64 = f64_add(lhs.sf_64, rhs.sf_64);
     } else if (softfloat) {
@@ -183,13 +174,10 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_sub(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_sub(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     union rv_freg res = {.i_64 = UINT64_MAX};
-    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
     if (softfloat && f64) {
         res.sf_64 = f64_sub(lhs.sf_64, rhs.sf_64);
     } else if (softfloat) {
@@ -204,13 +192,10 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_mul(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_mul(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     union rv_freg res = {.i_64 = UINT64_MAX};
-    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
     if (softfloat && f64) {
         res.sf_64 = f64_mul(lhs.sf_64, rhs.sf_64);
     } else if (softfloat) {
@@ -225,13 +210,10 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_div(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_div(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     union rv_freg res = {.i_64 = UINT64_MAX};
-    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+    union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
     if (softfloat && f64) {
         res.sf_64 = f64_div(lhs.sf_64, rhs.sf_64);
     } else if (softfloat) {
@@ -246,11 +228,9 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_sqrt(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_sqrt(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     union rv_freg res = {.i_64 = UINT64_MAX};
-    union rv_freg arg = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg arg = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
 
     if (f64) {
         if (softfloat) {
@@ -270,14 +250,12 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_ftof(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_ftof(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     bool src_f64 = RV_INSN_RS2(insn) == 1;
     // TODO: It should be impossible for src_f64 == f64, and for rs2 > 1.
     // However, no machine parameter -> can't trap.
 
-    union rv_freg arg = src_f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg arg = src_f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
 
     union rv_freg res = {.i_64 = UINT64_MAX};
     if (f64) {
@@ -297,8 +275,7 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_xtof(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_xtof(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     bool          is_unsigned = RV_INSN_RS2(insn) & 1;
     bool          x64         = RV_INSN_RS2(insn) & 2;
     int64_t       arg         = rv_xreg_read(cpu, RV_INSN_RS1(insn));
@@ -351,12 +328,10 @@ static inline void
     rv_freg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_ftox(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_ftox(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     bool          is_unsigned = RV_INSN_RS2(insn) & 1;
     bool          x64         = RV_INSN_RS2(insn) & 2;
-    union rv_freg arg         = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                                    : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+    union rv_freg arg         = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
     int64_t       res;
     if (is_unsigned && x64) {
         if (softfloat && f64) {
@@ -365,27 +340,11 @@ static inline void
             res = f32_to_ui64(arg.sf_32, softfloat_roundingMode, true);
         } else if (f64) {
             uint64_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_64,
-                (uint64_t)0,
-                UINT64_MAX,
-                0.0,
-                18446744073709551616.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_64, (uint64_t)0, UINT64_MAX, 0.0, 18446744073709551616.0);
             res = tmp;
         } else {
             uint64_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_32,
-                (uint64_t)0,
-                UINT64_MAX,
-                0.0,
-                18446744073709551616.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_32, (uint64_t)0, UINT64_MAX, 0.0, 18446744073709551616.0);
             res = tmp;
         }
     } else if (x64) {
@@ -395,27 +354,11 @@ static inline void
             res = f32_to_i64(arg.sf_32, softfloat_roundingMode, true);
         } else if (f64) {
             int64_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_64,
-                INT64_MIN,
-                INT64_MAX,
-                -9223372036854775808.0,
-                9223372036854775808.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_64, INT64_MIN, INT64_MAX, -9223372036854775808.0, 9223372036854775808.0);
             res = tmp;
         } else {
             int64_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_32,
-                INT64_MIN,
-                INT64_MAX,
-                -9223372036854775808.0,
-                9223372036854775808.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_32, INT64_MIN, INT64_MAX, -9223372036854775808.0, 9223372036854775808.0);
             res = tmp;
         }
     } else if (is_unsigned) {
@@ -425,27 +368,11 @@ static inline void
             res = f32_to_ui32(arg.sf_32, softfloat_roundingMode, true);
         } else if (f64) {
             uint32_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_64,
-                (uint32_t)0,
-                UINT32_MAX,
-                0.0,
-                4294967296.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_64, (uint32_t)0, UINT32_MAX, 0.0, 4294967296.0);
             res = tmp;
         } else {
             uint32_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_32,
-                (uint32_t)0,
-                UINT32_MAX,
-                0.0,
-                4294967296.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_32, (uint32_t)0, UINT32_MAX, 0.0, 4294967296.0);
             res = tmp;
         }
         // RISC-V sign-extends unsigned 32-bit values too.
@@ -457,42 +384,23 @@ static inline void
             res = f32_to_i32(arg.sf_32, softfloat_roundingMode, true);
         } else if (f64) {
             int32_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_64,
-                INT32_MIN,
-                INT32_MAX,
-                -2147483648.0,
-                2147483648.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_64, INT32_MIN, INT32_MAX, -2147483648.0, 2147483648.0);
             res = tmp;
         } else {
             int32_t tmp;
-            FTOX_HELPER(
-                cpu,
-                tmp,
-                arg.f_32,
-                INT32_MIN,
-                INT32_MAX,
-                -2147483648.0,
-                2147483648.0
-            );
+            FTOX_HELPER(cpu, tmp, arg.f_32, INT32_MIN, INT32_MAX, -2147483648.0, 2147483648.0);
             res = tmp;
         }
     }
     rv_xreg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void rv_float_mvxf_fclass(
-    struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64
-) {
+static inline void rv_float_mvxf_fclass(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     (void)softfloat;
     // fmv.x.w/d (funct3=0) transfers raw bits; fclass (funct3=1) interprets
     // the float value and must respect NaN-boxing.
-    union rv_freg arg = (RV_INSN_FUNCT3(insn) == 1 && !f64)
-                            ? rv_freg_read_f32(cpu, RV_INSN_RS1(insn))
-                            : rv_freg_read(cpu, RV_INSN_RS1(insn));
+    union rv_freg arg = (RV_INSN_FUNCT3(insn) == 1 && !f64) ? rv_freg_read_f32(cpu, RV_INSN_RS1(insn))
+                                                            : rv_freg_read(cpu, RV_INSN_RS1(insn));
 
     int64_t res;
     if (RV_INSN_FUNCT3(insn) == 1) {
@@ -592,8 +500,7 @@ static inline void rv_float_mvxf_fclass(
     rv_xreg_write(cpu, RV_INSN_RD(insn), res);
 }
 
-static inline void
-    rv_float_mvfx(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
+static inline void rv_float_mvfx(struct rv_cpu *cpu, uint32_t insn, bool softfloat, bool f64) {
     (void)softfloat;
     int64_t arg = rv_xreg_read(cpu, RV_INSN_RS1(insn));
 
@@ -608,12 +515,8 @@ static inline void
 }
 
 // Execute an instruction under the OP-FP major opcode.
-void rv_float_op_fp(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
-    feclearexcept(
-        FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW
-    );
+void rv_float_op_fp(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    feclearexcept(FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW);
     rv_softfloat_clearflags();
 
     if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
@@ -637,10 +540,8 @@ void rv_float_op_fp(
     // Operations without rounding mode.
     enum funct5 funct5 = RV_INSN_FUNCT5(insn);
     if (funct5 == FUNCT5_EQ_LE_LT) {
-        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
         bool          res;
 
         switch (RV_INSN_FUNCT3(insn)) {
@@ -663,10 +564,8 @@ void rv_float_op_fp(
     } else if (funct5 == FUNCT5_SGNJ) {
         // Note: Unlike arithmetic, these do not set flags nor canonicalize
         // NaNs. NaN-boxing still applies when reading the rs1 value as F32.
-        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
         union rv_freg res;
         uint64_t      sign_bit;
         if (f64) {
@@ -697,10 +596,8 @@ void rv_float_op_fp(
         return;
 
     } else if (funct5 == FUNCT5_MIN_MAX) {
-        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
-        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn))
-                                : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
+        union rv_freg lhs = f64 ? rv_freg_read(cpu, RV_INSN_RS1(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS1(insn));
+        union rv_freg rhs = f64 ? rv_freg_read(cpu, RV_INSN_RS2(insn)) : rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
         union rv_freg res = {.i_64 = UINT64_MAX};
 
         if (rv_is_snan(lhs, f64) || rv_is_snan(rhs, f64)) {
@@ -728,11 +625,9 @@ void rv_float_op_fp(
             bool is_min        = RV_INSN_FUNCT3(insn) == 0;
             // RISC-V: fmin(-0,+0)=-0, fmax(-0,+0)=+0. C's fmin/fmax doesn't
             // guarantee this ordering, so detect the both-zero case manually.
-            bool both_zero_f32 = !f64 && (lhs.i_32 & 0x7FFFFFFF) == 0 &&
-                                 (rhs.i_32 & 0x7FFFFFFF) == 0;
+            bool both_zero_f32 = !f64 && (lhs.i_32 & 0x7FFFFFFF) == 0 && (rhs.i_32 & 0x7FFFFFFF) == 0;
             bool both_zero_f64 =
-                f64 && (lhs.i_64 & UINT64_C(0x7FFFFFFFFFFFFFFF)) == 0 &&
-                (rhs.i_64 & UINT64_C(0x7FFFFFFFFFFFFFFF)) == 0;
+                f64 && (lhs.i_64 & UINT64_C(0x7FFFFFFFFFFFFFFF)) == 0 && (rhs.i_64 & UINT64_C(0x7FFFFFFFFFFFFFFF)) == 0;
             if (both_zero_f32) {
                 // fmin returns -0, fmax returns +0
                 res.i_64 = UINT64_MAX;
@@ -790,9 +685,7 @@ void rv_float_op_fp(
         case FUNCT5_FCVT_XTOF: rv_float_xtof(cpu, insn, softfloat, f64); break;
         case FUNCT5_FCVT_FTOX: rv_float_ftox(cpu, insn, softfloat, f64); break;
 
-        case FUNCT5_MVXF_CLASS:
-            rv_float_mvxf_fclass(cpu, insn, softfloat, f64);
-            break;
+        case FUNCT5_MVXF_CLASS: rv_float_mvxf_fclass(cpu, insn, softfloat, f64); break;
         case FUNCT5_MVFX: rv_float_mvfx(cpu, insn, softfloat, f64); break;
 
         default: rv_do_iillegal(machine, cpu, insn); return;
@@ -806,12 +699,8 @@ void rv_float_op_fp(
 }
 
 // Execute an instruction under the MADD, MSUB, NMADD or NMSUB major opcodes.
-void rv_float_fmadd(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
-    feclearexcept(
-        FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW
-    );
+void rv_float_fmadd(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+    feclearexcept(FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW);
     rv_softfloat_clearflags();
 
     if (!RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
@@ -849,8 +738,7 @@ void rv_float_fmadd(
         union rv_freg rs2 = rv_freg_read(cpu, RV_INSN_RS2(insn));
         union rv_freg rs3 = rv_freg_read(cpu, RV_INSN_RS3(insn));
 
-        if ((isinf(rs1.f_64) && iszero(rs2.f_64)) ||
-            (isinf(rs2.f_64) && iszero(rs1.f_64))) {
+        if ((isinf(rs1.f_64) && iszero(rs2.f_64)) || (isinf(rs2.f_64) && iszero(rs1.f_64))) {
             cpu->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;
         }
         if (negate_mul) {
@@ -870,8 +758,7 @@ void rv_float_fmadd(
         union rv_freg rs2 = rv_freg_read_f32(cpu, RV_INSN_RS2(insn));
         union rv_freg rs3 = rv_freg_read_f32(cpu, RV_INSN_RS3(insn));
 
-        if ((isinf(rs1.f_32) && iszero(rs2.f_32)) ||
-            (isinf(rs2.f_32) && iszero(rs1.f_32))) {
+        if ((isinf(rs1.f_32) && iszero(rs2.f_32)) || (isinf(rs2.f_32) && iszero(rs1.f_32))) {
             cpu->csr.fcsr |= 1 << RV_FFLAGS_NV_BIT;
         }
         if (negate_mul) {

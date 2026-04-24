@@ -61,8 +61,7 @@ enum rv_frm {
 };
 
 // Read a bit-field.
-#define RV_INSN_BITFIELD(insn, bitpos, bitmask)                                \
-    (((insn) >> (bitpos)) & (bitmask))
+#define RV_INSN_BITFIELD(insn, bitpos, bitmask) (((insn) >> (bitpos)) & (bitmask))
 
 // Major opcode.
 #define RV_INSN_OP_MAJ(insn) RV_INSN_BITFIELD(insn, 2, 0x1f)
@@ -83,12 +82,11 @@ enum rv_frm {
 #define RV_INSN_FUNCT5(insn) RV_INSN_BITFIELD(insn, 27, 0x1f)
 
 // The 12-bit imm field (unsigned).
-#define RV_INSN_UIMM12(insn) ((uint32_t)(insn) >> 20)
+#define RV_INSN_UIMM12(insn)  ((uint32_t)(insn) >> 20)
 // The 12-bit imm field (signed).
-#define RV_INSN_IMM12(insn)  ((int32_t)(insn) >> 20)
+#define RV_INSN_IMM12(insn)   ((int32_t)(insn) >> 20)
 // The 12-bit imm field for S-type instructions (signed).
-#define RV_INSN_S_IMM12(insn)                                                  \
-    (((int32_t)((insn) & 0xfe000000) >> 20) | ((int32_t)((insn) & 0xf80) >> 7))
+#define RV_INSN_S_IMM12(insn) (((int32_t)((insn) & 0xfe000000) >> 20) | ((int32_t)((insn) & 0xf80) >> 7))
 
 // The OP-FP float format field.
 #define RV_INSN_FFMT(insn) RV_INSN_BITFIELD(insn, 25, 0x3)

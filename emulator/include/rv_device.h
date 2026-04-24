@@ -14,9 +14,9 @@ typedef bool (*rv_mmio_write_fn_t)(void *dev, uint64_t offset, uint8_t size, uin
 
 // A contiguous memory-mapped I/O region registered with a machine.
 struct rv_mmio_region {
-    uint64_t            base;
-    uint64_t            size;
-    void               *device;
-    rv_mmio_read_fn_t   read;
-    rv_mmio_write_fn_t  write;
+    uint64_t           base;
+    uint64_t           size;
+    void              *device;
+    rv_mmio_read_fn_t  read;
+    rv_mmio_write_fn_t write;
 };

@@ -59,34 +59,28 @@ struct rv_cpu {
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
 // for jumps and branches.
-void rv_forcefeed_insn(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-);
+void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu);
 
 // Read from an integer register.
-[[gnu::always_inline]] static inline uint64_t
-    rv_xreg_read(struct rv_cpu *cpu, uint32_t index) {
+[[gnu::always_inline]] static inline uint64_t rv_xreg_read(struct rv_cpu *cpu, uint32_t index) {
     return cpu->xregs[index];
 }
 
 // Write to an integer register.
-[[gnu::always_inline]] static inline void
-    rv_xreg_write(struct rv_cpu *cpu, uint32_t index, uint64_t value) {
+[[gnu::always_inline]] static inline void rv_xreg_write(struct rv_cpu *cpu, uint32_t index, uint64_t value) {
     if (index != 0) {
         cpu->xregs[index] = value;
     }
 }
 
 // Read from an integer register.
-[[gnu::always_inline]] static inline union rv_freg
-    rv_freg_read(struct rv_cpu *cpu, uint32_t index) {
+[[gnu::always_inline]] static inline union rv_freg rv_freg_read(struct rv_cpu *cpu, uint32_t index) {
     return cpu->fregs[index];
 }
 
 // Write to an integer register.
-[[gnu::always_inline]] static inline void
-    rv_freg_write(struct rv_cpu *cpu, uint32_t index, union rv_freg value) {
+[[gnu::always_inline]] static inline void rv_freg_write(struct rv_cpu *cpu, uint32_t index, union rv_freg value) {
     cpu->fregs[index] = value;
 }

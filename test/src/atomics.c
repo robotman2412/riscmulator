@@ -13,9 +13,7 @@ struct trap_capture {
     bool     fired;
 };
 
-static bool capture_trap(
-    void *cookie, struct rv_machine *m, struct rv_cpu *cpu, struct rv_trap trap
-) {
+static bool capture_trap(void *cookie, struct rv_machine *m, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)m;
     (void)cpu;
     struct trap_capture *c = cookie;
@@ -26,7 +24,7 @@ static bool capture_trap(
 }
 
 static void setup_trap_hook(struct rv_machine *machine, struct trap_capture *cap) {
-    cap->fired       = false;
+    cap->fired           = false;
     machine->hook_cookie = cap;
     for (int i = 0; i < 32; i++) {
         machine->trap_hook[i] = capture_trap;
@@ -35,13 +33,13 @@ static void setup_trap_hook(struct rv_machine *machine, struct trap_capture *cap
 
 // Instruction encodings: all use rs1=x1 (address), rs2=x2 (data), rd=x3 (result).
 // LR.W  x3, (x1)      funct5=00010, funct3=010, rs2=x0
-#define LRW   0x1000A1AFu
+#define LRW      0x1000A1AFu
 // LR.D  x3, (x1)      funct5=00010, funct3=011, rs2=x0
-#define LRD   0x1000B1AFu
+#define LRD      0x1000B1AFu
 // SC.W  x3, x2, (x1)  funct5=00011, funct3=010
-#define SCW   0x1820A1AFu
+#define SCW      0x1820A1AFu
 // SC.D  x3, x2, (x1)  funct5=00011, funct3=011
-#define SCD   0x1820B1AFu
+#define SCD      0x1820B1AFu
 // AMOADD.W x3, x2, (x1) funct5=00000, funct3=010
 #define AMOADD_W 0x0020A1AFu
 // AMOADD.D x3, x2, (x1) funct5=00000, funct3=011

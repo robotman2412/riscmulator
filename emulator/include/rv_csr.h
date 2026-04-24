@@ -67,10 +67,9 @@ enum rv_xstate {
 };
 
 #define RV_MISA_MASK(ext) ((uint64_t)1 << ((ext) - 'A'))
-#define RV_MISA_VALUE                                                          \
-    ((uint64_t)1 << 63 | RV_MISA_MASK('I') | RV_MISA_MASK('M') |               \
-     RV_MISA_MASK('A') | RV_MISA_MASK('F') | RV_MISA_MASK('D') |               \
-     RV_MISA_MASK('C'))
+#define RV_MISA_VALUE                                                                                                  \
+    ((uint64_t)1 << 63 | RV_MISA_MASK('I') | RV_MISA_MASK('M') | RV_MISA_MASK('A') | RV_MISA_MASK('F') |               \
+     RV_MISA_MASK('D') | RV_MISA_MASK('C'))
 
 #define RV_STATUS_SIE_BIT      1
 #define RV_STATUS_MIE_BIT      3
@@ -91,33 +90,23 @@ enum rv_xstate {
 #define RV_STATUS_UXL_BASE_BIT 32 // ,33
 #define RV_STATUS_SXL_BASE_BIT 34 // ,35
 
-#define RV_MSTATUS_HARDWIRED                                                   \
-    ((uint64_t)2 << RV_STATUS_UXL_BASE_BIT | (uint64_t)2                       \
-                                                 << RV_STATUS_SXL_BASE_BIT)
+#define RV_MSTATUS_HARDWIRED ((uint64_t)2 << RV_STATUS_UXL_BASE_BIT | (uint64_t)2 << RV_STATUS_SXL_BASE_BIT)
 
-#define RV_MSTATUS_MASK                                                        \
-    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_MIE_BIT |     \
-     (uint64_t)1 << RV_STATUS_SPIE_BIT | (uint64_t)1 << RV_STATUS_UBE_BIT |    \
-     (uint64_t)1 << RV_STATUS_MPIE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |    \
-     (uint64_t)3 << RV_STATUS_VS_BASE_BIT |                                    \
-     (uint64_t)3 << RV_STATUS_MPP_BASE_BIT |                                   \
-     (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
-     (uint64_t)3 << RV_STATUS_XS_BASE_BIT |                                    \
-     (uint64_t)1 << RV_STATUS_MPRV_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT |    \
-     (uint64_t)1 << RV_STATUS_MXR_BIT | (uint64_t)1 << RV_STATUS_TVM_BIT |     \
+#define RV_MSTATUS_MASK                                                                                                \
+    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_MIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |         \
+     (uint64_t)1 << RV_STATUS_UBE_BIT | (uint64_t)1 << RV_STATUS_MPIE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |         \
+     (uint64_t)3 << RV_STATUS_VS_BASE_BIT | (uint64_t)3 << RV_STATUS_MPP_BASE_BIT |                                    \
+     (uint64_t)3 << RV_STATUS_FS_BASE_BIT | (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_MPRV_BIT | \
+     (uint64_t)1 << RV_STATUS_SUM_BIT | (uint64_t)1 << RV_STATUS_MXR_BIT | (uint64_t)1 << RV_STATUS_TVM_BIT |          \
      (uint64_t)1 << RV_STATUS_TW_BIT | (uint64_t)1 << RV_STATUS_TSR_BIT)
 
-#define RV_SSTATUS_MASK                                                        \
-    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT |    \
-     (uint64_t)1 << RV_STATUS_UBE_BIT | (uint64_t)1 << RV_STATUS_SPP_BIT |     \
-     (uint64_t)3 << RV_STATUS_VS_BASE_BIT |                                    \
-     (uint64_t)3 << RV_STATUS_FS_BASE_BIT |                                    \
-     (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT | \
-     (uint64_t)1 << RV_STATUS_MXR_BIT)
+#define RV_SSTATUS_MASK                                                                                                \
+    ((uint64_t)1 << RV_STATUS_SIE_BIT | (uint64_t)1 << RV_STATUS_SPIE_BIT | (uint64_t)1 << RV_STATUS_UBE_BIT |         \
+     (uint64_t)1 << RV_STATUS_SPP_BIT | (uint64_t)3 << RV_STATUS_VS_BASE_BIT | (uint64_t)3 << RV_STATUS_FS_BASE_BIT |  \
+     (uint64_t)3 << RV_STATUS_XS_BASE_BIT | (uint64_t)1 << RV_STATUS_SUM_BIT | (uint64_t)1 << RV_STATUS_MXR_BIT)
 
 // Check extension enable bits.
-#define RV_CHECK_XS(bits, xs_base_bit)                                         \
-    ((((bits) >> (xs_base_bit)) & 3) != RV_XSTATE_OFF)
+#define RV_CHECK_XS(bits, xs_base_bit) ((((bits) >> (xs_base_bit)) & 3) != RV_XSTATE_OFF)
 
 // Invalid operation.
 #define RV_FFLAGS_NV_BIT 4
@@ -149,9 +138,8 @@ enum rv_xstate {
 #define RV_MIP_MEIP_BIT 11 // Machine external interrupt (PLIC-owned)
 
 // Bits writable via mip or sip CSR writes (hardware owns MSIP, MTIP, MEIP).
-#define RV_SIP_WMASK                                                           \
-    ((UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_STIP_BIT) |     \
-     (UINT64_C(1) << RV_MIP_SEIP_BIT))
+#define RV_SIP_WMASK                                                                                                   \
+    ((UINT64_C(1) << RV_MIP_SSIP_BIT) | (UINT64_C(1) << RV_MIP_STIP_BIT) | (UINT64_C(1) << RV_MIP_SEIP_BIT))
 
 // PMP configuration byte bit fields.
 #define RV_PMPCFG_R_BIT         0 // Read permission.

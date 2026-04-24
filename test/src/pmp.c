@@ -149,11 +149,7 @@ TESTCASE(pmp_pmpaddr_grain_mask, {
 
     // Switch entry 0 to NAPOT; low bits [G-2:0] now read as 1; G-1 bit reads
     // from stored value.
-    TEST_ASSERT(csr_write(
-        cpu,
-        0x3A0,
-        (uint64_t)RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT
-    ))
+    TEST_ASSERT(csr_write(cpu, 0x3A0, (uint64_t)RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT))
     TEST_ASSERT(csr_read(cpu, 0x3B0, &val))
     TEST_ASSERT(val == (0xDEADBEEFFFFFFFFFULL | RV_PMPGRAIN_NAPOT_MASK))
 })
@@ -163,8 +159,7 @@ TESTCASE(pmp_pmpaddr_grain_mask, {
 static void set_pmp0_napot4k(struct rv_cpu *cpu, uint64_t base, uint8_t rwx) {
     cpu->privilege = 3;
     // L=1, A=NAPOT, permissions in bits [2:0].
-    uint8_t cfg    = (1 << RV_PMPCFG_L_BIT) |
-                  (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | (rwx & 7);
+    uint8_t cfg    = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | (rwx & 7);
     cpu->csr.pmpcfg.unpacked[0] = cfg;
     cpu->csr.pmpaddr[0]         = (base >> 2) | 0x1FF; // 4KB = 9 trailing ones
 }
@@ -207,9 +202,8 @@ TESTCASE(pmp_check_m_mode, {
     (void)machine;
 
     // Unlocked NAPOT entry at 0x80000000 with no permissions.
-    cpu->csr.pmpcfg.unpacked[0] =
-        (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT); // L=0
-    cpu->csr.pmpaddr[0] = (0x80000000 >> 2) | 0x1FF;
+    cpu->csr.pmpcfg.unpacked[0] = (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT); // L=0
+    cpu->csr.pmpaddr[0]         = (0x80000000 >> 2) | 0x1FF;
 
     // M-mode bypasses unlocked entries → default allow (returns 7).
     TEST_ASSERT(rv_pmp_check(machine, cpu, 0x80000100, 1, true) == 7)

@@ -22,43 +22,44 @@
 #define SATP_B UINT64_C(0x8000100000080006)
 
 // VM_TESTCASE: like TESTCASE but with a 64 KB machine at VM_RAM_BASE.
-#define VM_TESTCASE(name, ...)                                                                     \
-    static bool _testbody_##name(struct rv_machine *machine, struct rv_cpu *cpu) {                 \
-        { __VA_ARGS__ }                                                                            \
-        return true;                                                                               \
-    }                                                                                              \
-    bool test_##name(void) {                                                                       \
-        struct rv_machine _machine = {0};                                                          \
-        if (!rv_machine_init(&_machine, 1, VM_RAM_BASE, VM_RAM_SIZE)) {                            \
-            testcase_error_message("rv_machine_init failed");                                      \
-            return false;                                                                          \
-        }                                                                                          \
-        bool _result = _testbody_##name(&_machine, &_machine.cpus[0]);                            \
-        rv_machine_destroy(&_machine);                                                             \
-        return _result;                                                                            \
-    }                                                                                              \
-    [[gnu::constructor]] void _register_##name() {                                                 \
-        testcase_register(#name, test_##name);                                                     \
+#define VM_TESTCASE(name, ...)                                                                                         \
+    static bool _testbody_##name(struct rv_machine *machine, struct rv_cpu *cpu) {                                     \
+        {                                                                                                              \
+            __VA_ARGS__                                                                                                \
+        }                                                                                                              \
+        return true;                                                                                                   \
+    }                                                                                                                  \
+    bool test_##name(void) {                                                                                           \
+        struct rv_machine _machine = {0};                                                                              \
+        if (!rv_machine_init(&_machine, 1, VM_RAM_BASE, VM_RAM_SIZE)) {                                                \
+            testcase_error_message("rv_machine_init failed");                                                          \
+            return false;                                                                                              \
+        }                                                                                                              \
+        bool _result = _testbody_##name(&_machine, &_machine.cpus[0]);                                                 \
+        rv_machine_destroy(&_machine);                                                                                 \
+        return _result;                                                                                                \
+    }                                                                                                                  \
+    [[gnu::constructor]] void _register_##name() {                                                                     \
+        testcase_register(#name, test_##name);                                                                         \
     }
 
 // Write a little-endian 64-bit value to physical RAM.
 static void pte_write(struct rv_machine *machine, uint64_t paddr, uint64_t val) {
     uint8_t *p = machine->ram + (paddr - VM_RAM_BASE);
-    p[0] = (uint8_t)(val);
-    p[1] = (uint8_t)(val >> 8);
-    p[2] = (uint8_t)(val >> 16);
-    p[3] = (uint8_t)(val >> 24);
-    p[4] = (uint8_t)(val >> 32);
-    p[5] = (uint8_t)(val >> 40);
-    p[6] = (uint8_t)(val >> 48);
-    p[7] = (uint8_t)(val >> 56);
+    p[0]       = (uint8_t)(val);
+    p[1]       = (uint8_t)(val >> 8);
+    p[2]       = (uint8_t)(val >> 16);
+    p[3]       = (uint8_t)(val >> 24);
+    p[4]       = (uint8_t)(val >> 32);
+    p[5]       = (uint8_t)(val >> 40);
+    p[6]       = (uint8_t)(val >> 48);
+    p[7]       = (uint8_t)(val >> 56);
 }
 
 static uint64_t pte_read(struct rv_machine *machine, uint64_t paddr) {
     uint8_t *p = machine->ram + (paddr - VM_RAM_BASE);
-    return (uint64_t)p[0]        | (uint64_t)p[1] << 8  | (uint64_t)p[2] << 16 |
-           (uint64_t)p[3] << 24  | (uint64_t)p[4] << 32 | (uint64_t)p[5] << 40 |
-           (uint64_t)p[6] << 48  | (uint64_t)p[7] << 56;
+    return (uint64_t)p[0] | (uint64_t)p[1] << 8 | (uint64_t)p[2] << 16 | (uint64_t)p[3] << 24 | (uint64_t)p[4] << 32 |
+           (uint64_t)p[5] << 40 | (uint64_t)p[6] << 48 | (uint64_t)p[7] << 56;
 }
 
 // Build Layout A page tables and standard PMP in a freshly-inited machine.
@@ -83,9 +84,8 @@ static void vm_setup(struct rv_machine *machine, struct rv_cpu *cpu) {
     // L0[3]: VA 0x3000 → data2 at 0x80005000, V|R|W.
     pte_write(machine, 0x80002018, UINT64_C(0x0000000020001407));
     // PMP entry 0: locked NAPOT 64 KB at VM_RAM_BASE, full permissions.
-    cpu->csr.pmpcfg.unpacked[0] =
-        (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
-    cpu->csr.pmpaddr[0] = (VM_RAM_BASE >> 2) | 0x1FFF;
+    cpu->csr.pmpcfg.unpacked[0] = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
+    cpu->csr.pmpaddr[0]         = (VM_RAM_BASE >> 2) | 0x1FFF;
 
     cpu->csr.satp  = SATP_A;
     cpu->privilege = 1; // S-mode
@@ -143,8 +143,8 @@ VM_TESTCASE(vm_a_bit_load, {
     TEST_ASSERT(rv_access_virt(machine, cpu, 0x1000, &dummy, 3, RV_ACCESS_LOAD) == RV_MEM_OK)
 
     uint64_t pte_after = pte_read(machine, 0x80002008);
-    TEST_ASSERT((pte_after & (1 << RV_PTE_A_BIT)) != 0)   // A must be set
-    TEST_ASSERT((pte_after & (1 << RV_PTE_D_BIT)) == 0)   // D must stay clear
+    TEST_ASSERT((pte_after & (1 << RV_PTE_A_BIT)) != 0) // A must be set
+    TEST_ASSERT((pte_after & (1 << RV_PTE_D_BIT)) == 0) // D must stay clear
 })
 
 VM_TESTCASE(vm_a_d_bit_store, {
@@ -157,8 +157,8 @@ VM_TESTCASE(vm_a_d_bit_store, {
     TEST_ASSERT(rv_access_virt(machine, cpu, 0x1000, &val, 3, RV_ACCESS_STORE) == RV_MEM_OK)
 
     uint64_t pte_after = pte_read(machine, 0x80002008);
-    TEST_ASSERT((pte_after & (1 << RV_PTE_A_BIT)) != 0)   // A must be set
-    TEST_ASSERT((pte_after & (1 << RV_PTE_D_BIT)) != 0)   // D must be set
+    TEST_ASSERT((pte_after & (1 << RV_PTE_A_BIT)) != 0) // A must be set
+    TEST_ASSERT((pte_after & (1 << RV_PTE_D_BIT)) != 0) // D must be set
 })
 
 // ─── Cross-page-boundary ──────────────────────────────────────────────────────
@@ -205,13 +205,11 @@ VM_TESTCASE(vm_cross_page_fault, {
 VM_TESTCASE(vm_pmp_page_table, {
     vm_setup(machine, cpu);
     // Entry 0: deny all on L0 table page (4 KB NAPOT, no perms).
-    cpu->csr.pmpcfg.unpacked[0] =
-        (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 0;
-    cpu->csr.pmpaddr[0] = (0x80002000 >> 2) | 0x1FF; // 4 KB
+    cpu->csr.pmpcfg.unpacked[0] = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 0;
+    cpu->csr.pmpaddr[0]         = (0x80002000 >> 2) | 0x1FF; // 4 KB
     // Entry 1: allow everything else in RAM.
-    cpu->csr.pmpcfg.unpacked[1] =
-        (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
-    cpu->csr.pmpaddr[1] = (VM_RAM_BASE >> 2) | 0x1FFF; // 64 KB
+    cpu->csr.pmpcfg.unpacked[1] = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
+    cpu->csr.pmpaddr[1]         = (VM_RAM_BASE >> 2) | 0x1FFF; // 64 KB
 
     uint64_t dummy = 0;
     TEST_ASSERT(rv_access_virt(machine, cpu, 0x1000, &dummy, 3, RV_ACCESS_LOAD) == RV_MEM_ACCESS_FAULT)
@@ -222,13 +220,11 @@ VM_TESTCASE(vm_pmp_page_table, {
 VM_TESTCASE(vm_pmp_leaf, {
     vm_setup(machine, cpu);
     // Entry 0: deny all on VA 0x3000 target page (4 KB NAPOT).
-    cpu->csr.pmpcfg.unpacked[0] =
-        (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 0;
-    cpu->csr.pmpaddr[0] = (0x80005000 >> 2) | 0x1FF; // 4 KB
+    cpu->csr.pmpcfg.unpacked[0] = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 0;
+    cpu->csr.pmpaddr[0]         = (0x80005000 >> 2) | 0x1FF; // 4 KB
     // Entry 1: allow everything else in RAM.
-    cpu->csr.pmpcfg.unpacked[1] =
-        (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
-    cpu->csr.pmpaddr[1] = (VM_RAM_BASE >> 2) | 0x1FFF;
+    cpu->csr.pmpcfg.unpacked[1] = (1 << RV_PMPCFG_L_BIT) | (RV_PMP_ADDR_MATCH_NAPOT << RV_PMPCFG_A_BASE_BIT) | 7;
+    cpu->csr.pmpaddr[1]         = (VM_RAM_BASE >> 2) | 0x1FFF;
 
     uint64_t dummy = 0;
     TEST_ASSERT(rv_access_virt(machine, cpu, 0x3000, &dummy, 3, RV_ACCESS_LOAD) == RV_MEM_ACCESS_FAULT)

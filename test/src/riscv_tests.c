@@ -18,18 +18,10 @@
 #include <time.h>
 #include <unistd.h>
 
-static bool do_riscv_test(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    char const        *set,
-    char const        *test
-);
+static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char const *set, char const *test);
 
-#define RISCV_TEST2(set, set_str, test, test_str)                              \
-    TESTCASE(                                                                  \
-        riscv_##set##_##test,                                                  \
-        return do_riscv_test(machine, cpu, set_str, test_str);                 \
-    )
+#define RISCV_TEST2(set, set_str, test, test_str)                                                                      \
+    TESTCASE(riscv_##set##_##test, return do_riscv_test(machine, cpu, set_str, test_str);)
 #define RISCV_TEST1(set, test) RISCV_TEST2(set, #set, test, #test)
 
 RISCV_TEST1(rv64ui, add)
@@ -219,27 +211,9 @@ static bool compile_riscv_test(char const *set, char const *test) {
     char dirpath[64];
     char gccname[PATH_MAX];
     char copyname[PATH_MAX];
-    snprintf(
-        srcpath,
-        sizeof(srcpath) - 1,
-        "riscv-tests/isa/%s/%s.S",
-        set,
-        test
-    );
-    snprintf(
-        objpath,
-        sizeof(objpath) - 1,
-        "riscv-tests-build/%s/%s",
-        set,
-        test
-    );
-    snprintf(
-        binpath,
-        sizeof(binpath) - 1,
-        "riscv-tests-build/%s/%s.bin",
-        set,
-        test
-    );
+    snprintf(srcpath, sizeof(srcpath) - 1, "riscv-tests/isa/%s/%s.S", set, test);
+    snprintf(objpath, sizeof(objpath) - 1, "riscv-tests-build/%s/%s", set, test);
+    snprintf(binpath, sizeof(binpath) - 1, "riscv-tests-build/%s/%s.bin", set, test);
     snprintf(dirpath, sizeof(dirpath) - 1, "riscv-tests-build/%s", set);
     snprintf(gccname, sizeof(gccname) - 1, "%sgcc", riscv_test_prefix);
     snprintf(copyname, sizeof(copyname) - 1, "%sobjcopy", riscv_test_prefix);
@@ -297,35 +271,21 @@ struct riscv_test_state {
 static void dump_vm_state(struct rv_machine *machine, struct rv_cpu *cpu) {
     (void)machine;
     for (int i = 1; i < 32; i++) {
-        printf(
-            "  x%-2d:      %" PRIx64 " (%" PRId64 ")\n",
-            i,
-            cpu->xregs[i],
-            cpu->xregs[i]
-        );
+        printf("  x%-2d:      %" PRIx64 " (%" PRId64 ")\n", i, cpu->xregs[i], cpu->xregs[i]);
     }
     printf("  mstatus:  %" PRIx64 "\n", cpu->csr.mstatus);
     printf("  mscratch: %" PRIx64 "\n", cpu->csr.mscratch);
     printf("  fcsr:     %" PRIx64 "\n", cpu->csr.fcsr);
 }
 
-static bool trap_hook(
-    void              *cookie,
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    struct rv_trap     trap
-) {
+static bool trap_hook(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)machine;
     struct riscv_test_state *st = cookie;
 
-    if ((trap.cause == RV_CAUSE_ECALL_M || trap.cause == RV_CAUSE_ECALL_S ||
-         trap.cause == RV_CAUSE_ECALL_U) &&
+    if ((trap.cause == RV_CAUSE_ECALL_M || trap.cause == RV_CAUSE_ECALL_S || trap.cause == RV_CAUSE_ECALL_U) &&
         cpu->xregs[17] == 93) {
         if (cpu->xregs[10]) {
-            printf(
-                "\033[31m Sub-test %" PRIu64 " failed\n",
-                cpu->xregs[10] >> 1
-            );
+            printf("\033[31m Sub-test %" PRIu64 " failed\n", cpu->xregs[10] >> 1);
             goto vmfail;
         }
         st->finished = true;
@@ -334,11 +294,7 @@ static bool trap_hook(
 
     st->trap_count++;
     if (st->trap_count >= 10000) {
-        printf(
-            "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64 "\n",
-            trap.epc,
-            trap.cause
-        );
+        printf("\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64 "\n", trap.epc, trap.cause);
         goto vmfail;
     }
 
@@ -351,24 +307,13 @@ vmfail:
     return false;
 }
 
-static bool do_riscv_test(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    char const        *set,
-    char const        *test
-) {
+static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char const *set, char const *test) {
     if (!compile_riscv_test(set, test)) {
         return false;
     }
 
     char pathbuf[PATH_MAX];
-    snprintf(
-        pathbuf,
-        sizeof(pathbuf) - 1,
-        "riscv-tests-build/%s/%s.bin",
-        set,
-        test
-    );
+    snprintf(pathbuf, sizeof(pathbuf) - 1, "riscv-tests-build/%s/%s.bin", set, test);
 
     FILE *f = fopen(pathbuf, "rb");
     fseek(f, 0, SEEK_END);
@@ -393,7 +338,7 @@ static bool do_riscv_test(
     // Attach a CLINT so the CPU gets periodic timer interrupts (MTIP).
     // This lets WFI implementations that block-on-irq exit cleanly.
     static uint64_t const TIMER_PERIOD = 1000; // CLINT ticks (0.1 ms each)
-    struct rv_clint clint              = {0};
+    struct rv_clint       clint        = {0};
     rv_clint_init(&clint, machine);
     machine->clint = &clint;
     rv_clint_set_mtimecmp(&clint, 0, rv_clint_mtime(&clint) + TIMER_PERIOD);
@@ -413,22 +358,14 @@ static bool do_riscv_test(
         rv_step_insn(machine, cpu);
         // Drive the CLINT timer; re-arm immediately after each fire so the
         // interrupt source stays periodic across the entire test run.
-        if (atomic_load_explicit(
-                &cpu->clint_timer_armed, memory_order_relaxed)) {
+        if (atomic_load_explicit(&cpu->clint_timer_armed, memory_order_relaxed)) {
             rv_clint_check_timer(&clint, cpu);
-            if (!atomic_load_explicit(
-                    &cpu->clint_timer_armed, memory_order_relaxed)) {
-                rv_clint_set_mtimecmp(
-                    &clint, 0, rv_clint_mtime(&clint) + TIMER_PERIOD);
+            if (!atomic_load_explicit(&cpu->clint_timer_armed, memory_order_relaxed)) {
+                rv_clint_set_mtimecmp(&clint, 0, rv_clint_mtime(&clint) + TIMER_PERIOD);
             }
         }
         if ((cpu->xregs[3] & 1337) == 1337) {
-            printf(
-                "\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64
-                "\033[0m\n",
-                cpu->csr.mepc,
-                cpu->csr.mcause
-            );
+            printf("\033[31m VM crash at 0x%" PRIx64 " cause 0x%" PRIx64 "\033[0m\n", cpu->csr.mepc, cpu->csr.mcause);
             st.failure  = true;
             st.finished = true;
         }

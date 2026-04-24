@@ -7,8 +7,9 @@
 #include "rv_csr.h"
 #include "rv_insn.h"
 
-#include <softfloat.h>
 #include <stdint.h>
+
+#include <softfloat.h>
 
 // Map a RISC-V FRM value to the equivalent Berkeley SoftFloat rounding mode.
 static inline uint_fast8_t rv_frm_to_softfloat(enum rv_frm frm) {
@@ -18,7 +19,7 @@ static inline uint_fast8_t rv_frm_to_softfloat(enum rv_frm frm) {
         case RV_FRM_RDN: return softfloat_round_min;
         case RV_FRM_RUP: return softfloat_round_max;
         case RV_FRM_RMM: return softfloat_round_near_maxMag;
-        default:         return softfloat_round_near_even;
+        default: return softfloat_round_near_even;
     }
 }
 

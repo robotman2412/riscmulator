@@ -6,10 +6,11 @@
 
 #include "rv_device.h"
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include <pthread.h>
 
 struct rv_machine;
 
@@ -21,7 +22,7 @@ struct rv_machine;
 
 // Bit positions in cpu->plic_irq (mirrors mip layout).
 #define RV_PLIC_MEIP_BIT 11 // machine external interrupt pending
-#define RV_PLIC_SEIP_BIT  9 // supervisor external interrupt pending
+#define RV_PLIC_SEIP_BIT 9  // supervisor external interrupt pending
 
 // Per-context PLIC state.  Context index = hart * 2 + mode  (mode: 0=M, 1=S).
 struct rv_plic_context {

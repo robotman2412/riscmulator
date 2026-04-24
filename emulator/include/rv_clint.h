@@ -6,10 +6,11 @@
 
 #include "rv_device.h"
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include <pthread.h>
 
 struct rv_machine;
 struct rv_cpu;
@@ -26,16 +27,16 @@ struct rv_cpu;
 // CLINT device state.  Zero-initialise before calling rv_clint_init.
 struct rv_clint {
     // CLOCK_MONOTONIC nanoseconds corresponding to virtual mtime = 0.
-    _Atomic uint64_t  epoch_ns;
+    _Atomic uint64_t   epoch_ns;
     // Per-hart mtimecmp shadow register; updated under lock.
-    uint64_t         *mtimecmp;
+    uint64_t          *mtimecmp;
     // Per-hart absolute CLOCK_MONOTONIC deadline (epoch_ns + mtimecmp * 100).
     // Written under lock with relaxed ordering before arming clint_timer_armed
     // (release); read relaxed after the acquire on clint_timer_armed.
-    _Atomic uint64_t *deadline_ns;
-    size_t            cpu_count;
+    _Atomic uint64_t  *deadline_ns;
+    size_t             cpu_count;
     struct rv_machine *machine;
-    pthread_mutex_t   lock;
+    pthread_mutex_t    lock;
 };
 
 // Initialise the CLINT; cpu_count is derived from machine->cpu_count.
