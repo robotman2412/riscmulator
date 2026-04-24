@@ -86,64 +86,56 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
 }
 
 // Execute an instruction under the LOAD or LOAD-FP major opcodes.
-void rv_base_load(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_load(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool     is_load_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
-    uint64_t addr = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
+    uint8_t  funct3     = RV_INSN_FUNCT3(insn);
+    uint64_t addr       = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
 
     if (is_load_fp && !RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
-        // Float ops disabled.
         rv_do_iillegal(machine, cpu, insn);
         return;
     }
-    if (is_load_fp && (RV_INSN_FUNCT3(insn) & 0x6) != 0x2) {
-        // Invalid size.
+    if (is_load_fp && (funct3 & 0x6) != 0x2) {
         rv_do_iillegal(machine, cpu, insn);
         return;
     }
 
-    uint64_t rdata = 0;
-    switch (RV_INSN_FUNCT3(insn)) {
+    uint8_t size_exp;
+    switch (funct3) {
         case 0:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD, false))
-                return;
-            rdata = (uint64_t)(int64_t)(int8_t)rdata;
-            break;
+        case 4: size_exp = 0; break;
         case 1:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD, false))
-                return;
-            rdata = (uint64_t)(int64_t)(int16_t)rdata;
-            break;
+        case 5: size_exp = 1; break;
         case 2:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD, false))
-                return;
-            rdata = (uint64_t)(int64_t)(int32_t)rdata;
-            break;
-        case 3:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 3, RV_ACCESS_LOAD, false))
-                return;
-            break;
-        case 4:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 0, RV_ACCESS_LOAD, false))
-                return;
-            break;
-        case 5:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 1, RV_ACCESS_LOAD, false))
-                return;
-            break;
-        case 6:
-            if (!rv_access_phys(machine, cpu, addr, &rdata, 2, RV_ACCESS_LOAD, false))
-                return;
-            break;
+        case 6: size_exp = 2; break;
+        case 3: size_exp = 3; break;
         default: rv_do_iillegal(machine, cpu, insn); return;
     }
 
+    uint64_t           rdata = 0;
+    enum rv_mem_result r     = rv_access_virt(machine, cpu, addr, &rdata, size_exp, RV_ACCESS_LOAD);
+    if (r != RV_MEM_OK) {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .cause = rv_mem_cause(r, RV_ACCESS_LOAD),
+                .epc   = cpu->epc,
+                .tval  = addr,
+            }
+        );
+        return;
+    }
+
+    switch (funct3) {
+        case 0: rdata = (uint64_t)(int64_t)(int8_t)rdata; break;
+        case 1: rdata = (uint64_t)(int64_t)(int16_t)rdata; break;
+        case 2: rdata = (uint64_t)(int64_t)(int32_t)rdata; break;
+    }
+
     if (is_load_fp) {
-        if (RV_INSN_FUNCT3(insn) == 2) {
-            // flw: NaN-box the 32-bit float in the upper 32 bits.
-            rdata |= 0xffffffff00000000;
-        }
+        if (funct3 == 2)
+            rdata |= 0xffffffff00000000; // flw: NaN-box into upper 32 bits.
         rv_freg_write(cpu, RV_INSN_RD(insn), (union rv_freg){.i_64 = rdata});
     } else {
         rv_xreg_write(cpu, RV_INSN_RD(insn), rdata);
@@ -151,51 +143,38 @@ void rv_base_load(
 }
 
 // Execute an instruction under the STORE or STORE-FP major opcodes.
-void rv_base_store(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_store(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool     is_store_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
-    uint64_t addr =
-        rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
-    uint64_t wdata = is_store_fp ? rv_freg_read(cpu, RV_INSN_RS2(insn)).i_64
-                                 : rv_xreg_read(cpu, RV_INSN_RS2(insn));
+    uint8_t  funct3      = RV_INSN_FUNCT3(insn);
+    uint64_t addr        = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
+    uint64_t wdata = is_store_fp ? rv_freg_read(cpu, RV_INSN_RS2(insn)).i_64 : rv_xreg_read(cpu, RV_INSN_RS2(insn));
 
     if (is_store_fp && !RV_CHECK_XS(cpu->csr.mstatus, RV_STATUS_FS_BASE_BIT)) {
-        // Float ops disabled.
         rv_do_iillegal(machine, cpu, insn);
         return;
     }
-    if (is_store_fp && (RV_INSN_FUNCT3(insn) & 0x6) != 0x2) {
-        // Invalid size.
+    if (is_store_fp && (funct3 & 0x6) != 0x2) {
         rv_do_iillegal(machine, cpu, insn);
         return;
     }
 
-    switch (RV_INSN_FUNCT3(insn) & 3) {
-        case 0:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 0, RV_ACCESS_STORE, false))
-                return;
-            break;
-        case 1:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 1, RV_ACCESS_STORE, false))
-                return;
-            break;
-        case 2:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 2, RV_ACCESS_STORE, false))
-                return;
-            break;
-        case 3:
-            if (!rv_access_phys(machine, cpu, addr, &wdata, 3, RV_ACCESS_STORE, false))
-                return;
-            break;
-        default: rv_do_iillegal(machine, cpu, insn); return;
+    uint8_t            size_exp = funct3 & 3;
+    enum rv_mem_result r        = rv_access_virt(machine, cpu, addr, &wdata, size_exp, RV_ACCESS_STORE);
+    if (r != RV_MEM_OK) {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .cause = rv_mem_cause(r, RV_ACCESS_STORE),
+                .epc   = cpu->epc,
+                .tval  = addr,
+            }
+        );
     }
 }
 
 // Execute an instruction under the JAL major opcode.
-void rv_base_jal(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // Unfortunately, this imm is harder to extract than usual.
@@ -212,25 +191,19 @@ void rv_base_jal(
 }
 
 // Execute an instruction under the JALR major opcode.
-void rv_base_jalr(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_jalr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // No need to check for IALIGN because this emulator has the C extension
     // always enabled.
     // Target must be read before writing rd, in case rs1 == rd.
-    uint64_t target =
-        ((int64_t)rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn)) &
-        ~1ULL;
+    uint64_t target = ((int64_t)rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn)) & ~1ULL;
     rv_xreg_write(cpu, RV_INSN_RD(insn), cpu->pc);
     cpu->pc = target;
 }
 
 // Execute an instruction under the LUI or AUPIC major opcodes.
-void rv_base_lui(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     uint64_t res = (int32_t)(insn & 0xfffff000);
@@ -242,8 +215,7 @@ void rv_base_lui(
 }
 
 // Implementation of CSR operations.
-static void
-    do_csr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+static void do_csr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     uint32_t csr = RV_INSN_UIMM12(insn);
     uint64_t wdata;
     bool     do_write;
@@ -251,10 +223,9 @@ static void
         wdata    = RV_INSN_RS1(insn);
         do_write = true;
     } else {
-        wdata = rv_xreg_read(cpu, RV_INSN_RS1(insn));
+        wdata    = rv_xreg_read(cpu, RV_INSN_RS1(insn));
         // CSRRW always writes; CSRRS/CSRRC skip the write when rs1=x0.
-        do_write =
-            ((RV_INSN_FUNCT3(insn) & 3) == 1) || (RV_INSN_RS1(insn) != 0);
+        do_write = ((RV_INSN_FUNCT3(insn) & 3) == 1) || (RV_INSN_RS1(insn) != 0);
     }
 
     uint64_t rdata = 0;
@@ -283,9 +254,7 @@ static void
 }
 
 // Execute an instruction under the SYSTEM major opcode.
-void rv_base_system(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     if (RV_INSN_FUNCT3(insn) != 0) {
         do_csr(machine, cpu, insn);
     } else if (insn == 0x30200073 && cpu->privilege == 3) {
@@ -297,14 +266,12 @@ void rv_base_system(
         cpu->pc           = cpu->csr.mepc;
     } else if (insn == 0x10200073) {
         // sret: S-mode or higher required; TSR=1 in S-mode traps
-        if (cpu->privilege < 1 ||
-            (cpu->privilege == 1 &&
-             ((cpu->csr.mstatus >> RV_STATUS_TSR_BIT) & 1))) {
+        if (cpu->privilege < 1 || (cpu->privilege == 1 && ((cpu->csr.mstatus >> RV_STATUS_TSR_BIT) & 1))) {
             rv_do_iillegal(machine, cpu, insn);
             return;
         }
         uint64_t spp      = (cpu->csr.mstatus >> RV_STATUS_SPP_BIT) & 1;
-        bool spie         = (cpu->csr.mstatus >> RV_STATUS_SPIE_BIT) & 1;
+        bool     spie     = (cpu->csr.mstatus >> RV_STATUS_SPIE_BIT) & 1;
         cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SIE_BIT);
         cpu->csr.mstatus |= (uint64_t)spie << RV_STATUS_SIE_BIT;
         cpu->csr.mstatus &= ~(UINT64_C(1) << RV_STATUS_SPP_BIT);
@@ -313,17 +280,14 @@ void rv_base_system(
         cpu->pc           = cpu->csr.sepc;
     } else if (insn == 0x10500073) {
         // wfi: illegal if TW=1 and below M-mode; otherwise NOP/yield
-        if (cpu->privilege < 3 &&
-            ((cpu->csr.mstatus >> RV_STATUS_TW_BIT) & 1)) {
+        if (cpu->privilege < 3 && ((cpu->csr.mstatus >> RV_STATUS_TW_BIT) & 1)) {
             rv_do_iillegal(machine, cpu, insn);
             return;
         }
         sched_yield();
     } else if ((insn >> 25) == 0x09) {
         // sfence.vma: requires at least S-mode; TVM=1 in S-mode traps
-        if (cpu->privilege < 1 ||
-            (cpu->privilege == 1 &&
-             ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1))) {
+        if (cpu->privilege < 1 || (cpu->privilege == 1 && ((cpu->csr.mstatus >> RV_STATUS_TVM_BIT) & 1))) {
             rv_do_iillegal(machine, cpu, insn);
             return;
         }
@@ -371,9 +335,7 @@ void rv_base_system(
 }
 
 // Execute an instruction under the BRANCH major opcode.
-void rv_base_branch(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // Like JAL, this IMM takes some more effort to extract.
@@ -405,9 +367,7 @@ void rv_base_branch(
 }
 
 // Execute an instruction under the MISC-MEM major opcode.
-void rv_base_miscmem(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_base_miscmem(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
     (void)cpu;
 

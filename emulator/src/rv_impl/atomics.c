@@ -28,9 +28,7 @@
 #define AMO_MINU 0x18u
 #define AMO_MAXU 0x1Cu
 
-void rv_atomic_op(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
-) {
+void rv_atomic_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     uint8_t funct3 = RV_INSN_FUNCT3(insn);
     uint8_t funct5 = AMO_FUNCT5(insn);
     bool    is_32  = (funct3 == 2);
@@ -68,23 +66,43 @@ void rv_atomic_op(
 
         pthread_mutex_lock(&machine->atomic_lock);
 
-        uint64_t val;
+        uint64_t           val;
+        enum rv_mem_result r;
         if (is_32) {
             uint32_t tmp = 0;
-            if (!rv_access_phys(machine, cpu, addr, &tmp, 2, RV_ACCESS_LOAD)) {
+            r            = rv_access_virt(machine, cpu, addr, &tmp, 2, RV_ACCESS_LOAD);
+            if (r != RV_MEM_OK) {
                 pthread_mutex_unlock(&machine->atomic_lock);
+                rv_do_trap(
+                    machine,
+                    cpu,
+                    (struct rv_trap){
+                        .cause = rv_mem_cause(r, RV_ACCESS_LOAD),
+                        .epc   = cpu->epc,
+                        .tval  = addr,
+                    }
+                );
                 return;
             }
             val = (int64_t)(int32_t)tmp;
         } else {
-            if (!rv_access_phys(machine, cpu, addr, &val, 3, RV_ACCESS_LOAD)) {
+            r = rv_access_virt(machine, cpu, addr, &val, 3, RV_ACCESS_LOAD);
+            if (r != RV_MEM_OK) {
                 pthread_mutex_unlock(&machine->atomic_lock);
+                rv_do_trap(
+                    machine,
+                    cpu,
+                    (struct rv_trap){
+                        .cause = rv_mem_cause(r, RV_ACCESS_LOAD),
+                        .epc   = cpu->epc,
+                        .tval  = addr,
+                    }
+                );
                 return;
             }
         }
 
-        machine->reservations[mhartid] =
-            (struct rv_reservation){.addr = addr, .valid = true};
+        machine->reservations[mhartid] = (struct rv_reservation){.addr = addr, .valid = true};
 
         pthread_mutex_unlock(&machine->atomic_lock);
 
@@ -102,29 +120,36 @@ void rv_atomic_op(
         bool                   success = res->valid && res->addr == addr;
 
         if (success) {
+            enum rv_mem_result r;
             if (is_32) {
                 uint32_t v = (uint32_t)rs2val;
-                if (!rv_access_phys(
+                r          = rv_access_virt(machine, cpu, addr, &v, 2, RV_ACCESS_STORE);
+                if (r != RV_MEM_OK) {
+                    pthread_mutex_unlock(&machine->atomic_lock);
+                    rv_do_trap(
                         machine,
                         cpu,
-                        addr,
-                        &v,
-                        2,
-                        RV_ACCESS_STORE
-                    )) {
-                    pthread_mutex_unlock(&machine->atomic_lock);
+                        (struct rv_trap){
+                            .cause = rv_mem_cause(r, RV_ACCESS_STORE),
+                            .epc   = cpu->epc,
+                            .tval  = addr,
+                        }
+                    );
                     return;
                 }
             } else {
-                if (!rv_access_phys(
+                r = rv_access_virt(machine, cpu, addr, &rs2val, 3, RV_ACCESS_STORE);
+                if (r != RV_MEM_OK) {
+                    pthread_mutex_unlock(&machine->atomic_lock);
+                    rv_do_trap(
                         machine,
                         cpu,
-                        addr,
-                        &rs2val,
-                        3,
-                        RV_ACCESS_STORE
-                    )) {
-                    pthread_mutex_unlock(&machine->atomic_lock);
+                        (struct rv_trap){
+                            .cause = rv_mem_cause(r, RV_ACCESS_STORE),
+                            .epc   = cpu->epc,
+                            .tval  = addr,
+                        }
+                    );
                     return;
                 }
             }
@@ -142,17 +167,38 @@ void rv_atomic_op(
 
     pthread_mutex_lock(&machine->atomic_lock);
 
-    uint64_t old;
+    uint64_t           old;
+    enum rv_mem_result r;
     if (is_32) {
         uint32_t tmp = 0;
-        if (!rv_access_phys(machine, cpu, addr, &tmp, 2, RV_ACCESS_AMO)) {
+        r            = rv_access_virt(machine, cpu, addr, &tmp, 2, RV_ACCESS_AMO);
+        if (r != RV_MEM_OK) {
             pthread_mutex_unlock(&machine->atomic_lock);
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = rv_mem_cause(r, RV_ACCESS_AMO),
+                    .epc   = cpu->epc,
+                    .tval  = addr,
+                }
+            );
             return;
         }
         old = (int64_t)(int32_t)tmp;
     } else {
-        if (!rv_access_phys(machine, cpu, addr, &old, 3, RV_ACCESS_AMO)) {
+        r = rv_access_virt(machine, cpu, addr, &old, 3, RV_ACCESS_AMO);
+        if (r != RV_MEM_OK) {
             pthread_mutex_unlock(&machine->atomic_lock);
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = rv_mem_cause(r, RV_ACCESS_AMO),
+                    .epc   = cpu->epc,
+                    .tval  = addr,
+                }
+            );
             return;
         }
     }
@@ -182,21 +228,40 @@ void rv_atomic_op(
 
     if (is_32) {
         uint32_t v = (uint32_t)newval;
-        if (!rv_access_phys(machine, cpu, addr, &v, 2, RV_ACCESS_STORE)) {
+        r          = rv_access_virt(machine, cpu, addr, &v, 2, RV_ACCESS_STORE);
+        if (r != RV_MEM_OK) {
             pthread_mutex_unlock(&machine->atomic_lock);
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = rv_mem_cause(r, RV_ACCESS_STORE),
+                    .epc   = cpu->epc,
+                    .tval  = addr,
+                }
+            );
             return;
         }
     } else {
-        if (!rv_access_phys(machine, cpu, addr, &newval, 3, RV_ACCESS_STORE)) {
+        r = rv_access_virt(machine, cpu, addr, &newval, 3, RV_ACCESS_STORE);
+        if (r != RV_MEM_OK) {
             pthread_mutex_unlock(&machine->atomic_lock);
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = rv_mem_cause(r, RV_ACCESS_STORE),
+                    .epc   = cpu->epc,
+                    .tval  = addr,
+                }
+            );
             return;
         }
     }
 
     // Invalidate any reservation that overlaps the written address.
     for (size_t i = 0; i < machine->cpu_count; i++) {
-        if (machine->reservations[i].valid &&
-            machine->reservations[i].addr == addr) {
+        if (machine->reservations[i].valid && machine->reservations[i].addr == addr) {
             machine->reservations[i].valid = false;
         }
     }

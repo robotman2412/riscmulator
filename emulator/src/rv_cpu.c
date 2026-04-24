@@ -44,9 +44,20 @@ void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t 
 
 // Fetch and execute one instruction.
 void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
-    uint16_t hw;
-    if (!rv_access_phys(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN, false))
+    uint16_t           hw;
+    enum rv_mem_result r = rv_access_virt(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN);
+    if (r != RV_MEM_OK) {
+        rv_do_trap(
+            machine,
+            cpu,
+            (struct rv_trap){
+                .cause = rv_mem_cause(r, RV_ACCESS_INSN),
+                .epc   = cpu->pc,
+                .tval  = cpu->pc,
+            }
+        );
         return;
+    }
 
     uint32_t insn;
     if ((hw & 0x3u) != 0x3u) {
@@ -62,8 +73,19 @@ void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
         // Full 32-bit instruction: fetch the upper halfword.
         uint16_t hw2;
         uint64_t pc2 = cpu->pc + 2;
-        if (!rv_access_phys(machine, cpu, pc2, &hw2, 1, RV_ACCESS_INSN, false))
+        r            = rv_access_virt(machine, cpu, pc2, &hw2, 1, RV_ACCESS_INSN);
+        if (r != RV_MEM_OK) {
+            rv_do_trap(
+                machine,
+                cpu,
+                (struct rv_trap){
+                    .cause = rv_mem_cause(r, RV_ACCESS_INSN),
+                    .epc   = cpu->pc,
+                    .tval  = pc2,
+                }
+            );
             return;
+        }
         insn      = (uint32_t)hw | ((uint32_t)hw2 << 16);
         cpu->epc  = cpu->pc;
         cpu->pc  += 4;

@@ -103,9 +103,8 @@ bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region regio
 }
 
 // Dispatch a single MMIO access to a known region.
-// data=nullptr is a no-op (permission-check pass); returns true.
-// Returns false (with trap raised) if the device signals an access fault.
-static bool mmio_dispatch(
+// data=nullptr is a no-op (permission-check pass); returns RV_MEM_OK.
+static enum rv_mem_result mmio_dispatch(
     struct rv_machine     *machine,
     struct rv_cpu         *cpu,
     struct rv_mmio_region *r,
@@ -114,8 +113,10 @@ static bool mmio_dispatch(
     uint8_t                size,
     enum rv_access         mode
 ) {
+    (void)machine;
+    (void)cpu;
     if (!data)
-        return true;
+        return RV_MEM_OK;
 
     bool ok;
     if (mode == RV_ACCESS_STORE) {
@@ -129,22 +130,11 @@ static bool mmio_dispatch(
             memcpy(data, &val, size);
     }
 
-    if (!ok) {
-        enum rv_cause cause;
-        switch (mode) {
-            case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
-            case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
-            case RV_ACCESS_AMO:
-            case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
-        }
-        rv_do_trap(machine, cpu, (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr});
-        return false;
-    }
-    return true;
+    return ok ? RV_MEM_OK : RV_MEM_ACCESS_FAULT;
 }
 
 // Implementation of misaligned accesses.
-static bool misaligned_access(
+static enum rv_mem_result misaligned_access(
     struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, uint64_t *data, size_t size, enum rv_access mode
 ) {
     // Loop (partial) accesses until done.
@@ -175,70 +165,40 @@ static bool misaligned_access(
                 }
             }
             if (!r) {
-                enum rv_cause cause;
-                switch (mode) {
-                    case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
-                    case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
-                    case RV_ACCESS_AMO:
-                    case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
-                }
-                rv_do_trap(machine, cpu, (struct rv_trap){.cause = cause, .epc = cpu->epc, .tval = addr});
-                return false;
+                return RV_MEM_ACCESS_FAULT;
             }
             uint64_t part = size;
             if (addr + part > r->base + r->size) {
                 part = r->base + r->size - addr;
             }
-            if (!mmio_dispatch(machine, cpu, r, addr, data, (uint8_t)part, mode)) {
-                return false;
+            enum rv_mem_result mr = mmio_dispatch(machine, cpu, r, addr, data, (uint8_t)part, mode);
+            if (mr != RV_MEM_OK) {
+                return mr;
             }
             addr += part;
             size -= part;
         }
     }
 
-    return true;
+    return RV_MEM_OK;
 }
 
-static inline bool
+static inline enum rv_mem_result
     do_pmp_check(struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, size_t size, enum rv_access mode) {
     uint8_t perm = rv_pmp_check(machine, cpu, addr, size, cpu->privilege == 3);
 
-    bool          ok;
-    enum rv_cause cause;
+    bool ok;
     switch (mode) {
-        case RV_ACCESS_INSN:
-            cause = RV_CAUSE_IACCESS;
-            ok    = perm & (1 << RV_PMPCFG_X_BIT);
-            break;
-        case RV_ACCESS_LOAD:
-            cause = RV_CAUSE_LACCESS;
-            ok    = perm & (1 << RV_PMPCFG_R_BIT);
-            break;
+        case RV_ACCESS_INSN: ok = perm & (1 << RV_PMPCFG_X_BIT); break;
+        case RV_ACCESS_LOAD: ok = perm & (1 << RV_PMPCFG_R_BIT); break;
         case RV_ACCESS_AMO:
-        case RV_ACCESS_STORE:
-            cause = RV_CAUSE_SACCESS;
-            ok    = perm & (1 << RV_PMPCFG_W_BIT);
-            break;
+        case RV_ACCESS_STORE: ok = perm & (1 << RV_PMPCFG_W_BIT); break;
     }
-    if (!ok) {
-        rv_do_trap(
-            machine,
-            cpu,
-            (struct rv_trap){
-                .cause = cause,
-                .epc   = cpu->epc,
-                .tval  = addr,
-            }
-        );
-        return false;
-    }
-
-    return true;
+    return ok ? RV_MEM_OK : RV_MEM_ACCESS_FAULT;
 }
 
 // Partial access to physical memory (e.g. spanning virtual page boundary).
-bool rv_access_phys_partial(
+enum rv_mem_result rv_access_phys_partial(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           addr,
@@ -247,15 +207,20 @@ bool rv_access_phys_partial(
     enum rv_access     mode,
     bool               ignore_pmp
 ) {
-    return (ignore_pmp || do_pmp_check(machine, cpu, addr, size, mode)) &&
-           // The first checks the access permissions,
-           misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
-           // the second actually commits to the access.
-           misaligned_access(machine, cpu, addr, data, size, mode);
+    if (!ignore_pmp) {
+        enum rv_mem_result r = do_pmp_check(machine, cpu, addr, size, mode);
+        if (r != RV_MEM_OK)
+            return r;
+    }
+    // The first pass checks access permissions, the second commits.
+    enum rv_mem_result r = misaligned_access(machine, cpu, addr, nullptr, size, mode);
+    if (r != RV_MEM_OK)
+        return r;
+    return misaligned_access(machine, cpu, addr, data, size, mode);
 }
 
 // Access physical memory, optimizing for aligned access.
-bool rv_access_phys(
+enum rv_mem_result rv_access_phys(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           addr,
@@ -266,8 +231,10 @@ bool rv_access_phys(
 ) {
     uint64_t size = UINT64_C(1) << size_exp;
 
-    if (!ignore_pmp && !do_pmp_check(machine, cpu, addr, size, mode)) {
-        return false;
+    if (!ignore_pmp) {
+        enum rv_mem_result r = do_pmp_check(machine, cpu, addr, size, mode);
+        if (r != RV_MEM_OK)
+            return r;
     }
 
     // Aligned RAM access fast path.
@@ -288,15 +255,16 @@ bool rv_access_phys(
                 case 3: *(uint64_t *)data = *(uint64_t *)ptr; break;
             }
         }
-        return true;
+        return RV_MEM_OK;
     }
 
     // Break up into aligned accesses if needed.
     if (addr % size) {
-        // The first checks the access permissions,
-        // the second actually commits to the access.
-        return misaligned_access(machine, cpu, addr, nullptr, size, mode) &&
-               misaligned_access(machine, cpu, addr, data, size, mode);
+        // The first pass checks permissions, the second commits.
+        enum rv_mem_result r = misaligned_access(machine, cpu, addr, nullptr, size, mode);
+        if (r != RV_MEM_OK)
+            return r;
+        return misaligned_access(machine, cpu, addr, data, size, mode);
     }
 
     // Aligned MMIO dispatch.
@@ -307,22 +275,5 @@ bool rv_access_phys(
         }
     }
 
-    // Invalid access.
-    enum rv_cause cause;
-    switch (mode) {
-        case RV_ACCESS_INSN: cause = RV_CAUSE_IACCESS; break;
-        case RV_ACCESS_LOAD: cause = RV_CAUSE_LACCESS; break;
-        case RV_ACCESS_AMO:
-        case RV_ACCESS_STORE: cause = RV_CAUSE_SACCESS; break;
-    }
-    rv_do_trap(
-        machine,
-        cpu,
-        (struct rv_trap){
-            .epc   = cpu->epc,
-            .tval  = addr,
-            .cause = cause,
-        }
-    );
-    return false;
+    return RV_MEM_ACCESS_FAULT;
 }

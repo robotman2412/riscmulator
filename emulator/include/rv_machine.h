@@ -29,14 +29,35 @@ enum rv_access {
     RV_ACCESS_STORE,
 };
 
+// Result of a memory access attempt.
+enum rv_mem_result {
+    RV_MEM_OK,           // Access succeeded.
+    RV_MEM_ACCESS_FAULT, // Physical access fault (PMP, unmapped, MMIO error).
+    RV_MEM_PAGE_FAULT,   // Virtual memory page fault.
+};
+
+// Map a memory result + access mode to the correct trap cause.
+static inline enum rv_cause rv_mem_cause(enum rv_mem_result r, enum rv_access mode) {
+    if (r == RV_MEM_PAGE_FAULT) {
+        switch (mode) {
+            case RV_ACCESS_INSN:  return RV_CAUSE_IPAGE;
+            case RV_ACCESS_LOAD:  return RV_CAUSE_LPAGE;
+            case RV_ACCESS_AMO:
+            case RV_ACCESS_STORE: return RV_CAUSE_SPAGE;
+        }
+    }
+    switch (mode) {
+        case RV_ACCESS_INSN:  return RV_CAUSE_IACCESS;
+        case RV_ACCESS_LOAD:  return RV_CAUSE_LACCESS;
+        case RV_ACCESS_AMO:
+        case RV_ACCESS_STORE: return RV_CAUSE_SACCESS;
+    }
+    __builtin_unreachable();
+}
+
 // Callback to run instead of the normal trap mechanism.
 // If this returns true, the normal trap mechanism activates.
-typedef bool (*rv_trap_fn_t)(
-    void              *cookie,
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    struct rv_trap     trap
-);
+typedef bool (*rv_trap_fn_t)(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
 
 // Per-hart LR reservation entry; one per CPU indexed by mhartid.
 struct rv_reservation {
@@ -72,12 +93,7 @@ struct rv_machine {
 // Initialise a machine: allocate cpu_count CPUs, RAM of ram_size bytes at
 // ram_start, and set up the atomic_lock and reservations array. Sets mhartid =
 // i for each CPU.
-bool rv_machine_init(
-    struct rv_machine *machine,
-    size_t             cpu_count,
-    uint64_t           ram_start,
-    size_t             ram_size
-);
+bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size);
 // Run all CPUs concurrently (one pthread each) until every cpu->halted is set.
 void rv_machine_run(struct rv_machine *machine);
 // Free all resources allocated by rv_machine_init.
@@ -87,20 +103,22 @@ void rv_machine_destroy(struct rv_machine *machine);
 bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region);
 
 // Partial access to physical memory (e.g. spanning virtual page boundary).
-bool rv_access_phys_partial(
+enum rv_mem_result rv_access_phys_partial(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           addr,
     void              *data,
     size_t             size,
-    enum rv_access     mode
+    enum rv_access     mode,
+    bool               ignore_pmp
 );
 // Access physical memory, optimizing for aligned access.
-bool rv_access_phys(
+enum rv_mem_result rv_access_phys(
     struct rv_machine *machine,
     struct rv_cpu     *cpu,
     uint64_t           addr,
     void              *data,
     uint8_t            size_exp,
-    enum rv_access     mode
+    enum rv_access     mode,
+    bool               ignore_pmp
 );

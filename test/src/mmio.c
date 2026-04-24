@@ -3,7 +3,6 @@
 
 #include "rv_device.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
 #include "testcase.h"
 
 #include <string.h>
@@ -36,19 +35,6 @@ static bool mock_write(void *dev, uint64_t offset, uint8_t size, uint64_t value)
     return true;
 }
 
-static bool trap_catch_hook(
-    void              *cookie,
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    struct rv_trap     trap
-) {
-    (void)machine;
-    (void)cpu;
-    bool *caught       = cookie;
-    caught[trap.cause] = true;
-    return true;
-}
-
 // MMIO region placed well above RAM (RAM: 0x10000–0x11000).
 #define MOCK_BASE UINT64_C(0x20000)
 #define MOCK_SIZE 16
@@ -74,13 +60,13 @@ TESTCASE(mmio_aligned_read, {
     ));
 
     uint64_t data = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(data == 0xAB);
     TEST_ASSERT(dev.last_read_offset == 0);
     TEST_ASSERT(dev.last_read_size == 1);
 
     data = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 4, &data, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 4, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(data == 0x12345678);
     TEST_ASSERT(dev.last_read_offset == 4);
     TEST_ASSERT(dev.last_read_size == 4);
@@ -102,14 +88,14 @@ TESTCASE(mmio_aligned_write, {
     ));
 
     uint64_t data = 0xAB;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_STORE, false) == RV_MEM_OK);
     TEST_ASSERT(dev.last_write_offset == 0);
     TEST_ASSERT(dev.last_write_size == 1);
     TEST_ASSERT(dev.last_write_value == 0xAB);
     TEST_ASSERT(dev.mem[0] == 0xAB);
 
     data = 0x12345678;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 4, &data, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 4, &data, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     TEST_ASSERT(dev.last_write_offset == 4);
     TEST_ASSERT(dev.last_write_size == 4);
     TEST_ASSERT(dev.last_write_value == 0x12345678);
@@ -121,13 +107,10 @@ TESTCASE(mmio_aligned_write, {
 
 // Access outside both RAM and any MMIO region raises an access fault.
 TESTCASE(mmio_fault_hole, {
-    bool caught[32]      = {0};
-    machine->hook_cookie = caught;
-    for (int i = 0; i < 32; i++) machine->trap_hook[i] = &trap_catch_hook;
-
     uint64_t data = 0;
-    TEST_ASSERT(!rv_access_phys(machine, cpu, 0x30000, &data, 2, RV_ACCESS_LOAD));
-    TEST_ASSERT(caught[RV_CAUSE_LACCESS]);
+    TEST_ASSERT(
+        rv_access_phys(machine, cpu, 0x30000, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT
+    );
 })
 
 // A device returning false from its callback causes an access fault.
@@ -148,10 +131,6 @@ static bool fault_write(void *dev, uint64_t offset, uint8_t size, uint64_t value
 }
 
 TESTCASE(mmio_device_fault, {
-    bool caught[32]      = {0};
-    machine->hook_cookie = caught;
-    for (int i = 0; i < 32; i++) machine->trap_hook[i] = &trap_catch_hook;
-
     TEST_ASSERT(rv_machine_add_mmio(
         machine,
         (struct rv_mmio_region){
@@ -164,13 +143,13 @@ TESTCASE(mmio_device_fault, {
     ));
 
     uint64_t data = 0;
-    TEST_ASSERT(!rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_LOAD));
-    TEST_ASSERT(caught[RV_CAUSE_LACCESS]);
-
-    memset(caught, 0, sizeof(caught));
+    TEST_ASSERT(
+        rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_LOAD, false) == RV_MEM_ACCESS_FAULT
+    );
     data = 0xDEAD;
-    TEST_ASSERT(!rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_STORE));
-    TEST_ASSERT(caught[RV_CAUSE_SACCESS]);
+    TEST_ASSERT(
+        rv_access_phys(machine, cpu, MOCK_BASE, &data, 2, RV_ACCESS_STORE, false) == RV_MEM_ACCESS_FAULT
+    );
 })
 
 // With two regions registered, each access is dispatched to the right device.
@@ -202,10 +181,10 @@ TESTCASE(mmio_multiple_regions, {
     ));
 
     uint64_t data = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE, &data, 0, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(data == 0x11);
 
     data = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 0x1000, &data, 0, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, MOCK_BASE + 0x1000, &data, 0, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(data == 0x22);
 })

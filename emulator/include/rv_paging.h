@@ -4,14 +4,15 @@
 
 #pragma once
 
+#include "rv_machine.h"
+
 #include <stdint.h>
 
-struct rv_machine;
 struct rv_cpu;
 struct rv_trap;
 
-#define RV_TLB_WAYS 16
-#define RV_TLB_ROWS 16
+#define RV_TLB_COLUMNS 16
+#define RV_TLB_ROWS    16
 
 #define RV_PTE_V_BIT         0
 #define RV_PTE_R_BIT         1
@@ -22,6 +23,7 @@ struct rv_trap;
 #define RV_PTE_A_BIT         6
 #define RV_PTE_D_BIT         7
 #define RV_PTE_PPN_BASE_BIT  10
+#define RV_PTE_RWX_MASK      UINT64_C(0x000000000000001E)
 #define RV_PTE_PPN_MASK      UINT64_C(0x003ffffffffffc00)
 #define RV_PTE_RESERVED_MASK UINT64_C(0xffc0000000000000)
 
@@ -41,17 +43,29 @@ struct rv_tlb_entry {
 // Translation lookaside buffer.
 struct rv_tlb {
     // TLB entries.
-    struct rv_tlb_entry entries[RV_TLB_WAYS * RV_TLB_ROWS];
+    struct rv_tlb_entry entries[RV_TLB_COLUMNS * RV_TLB_ROWS];
     // Per-row entry valid bits.
     uint16_t            valid[RV_TLB_ROWS];
+    // Next column to replace in (global round-robin replacement policy).
+    uint8_t             next_column;
 };
 
 // Look up a page-table entry without using the TLB.
-// Writes to `pte_out`, or `trap_out` in the case of a fault while translating.
-bool rv_paging_raw_lookup(
-    struct rv_machine *machine,
-    uint64_t           satp_value,
-    uint64_t           vaddr,
-    uint64_t          *pte_out,
-    struct rv_trap    *trap_out
+// Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
+enum rv_mem_result rv_paging_raw_lookup(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
 );
+
+// Do a cached lookup; try reading from the TLB first.
+// Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
+enum rv_mem_result rv_paging_lookup(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, bool set_a, bool set_d
+);
+
+// Access virtual memory.
+enum rv_mem_result rv_access_virt(
+    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
+);
+
+// Whether a virtual address is canonical.
+bool rv_is_canon_vaddr(struct rv_cpu *cpu, uint64_t vaddr);

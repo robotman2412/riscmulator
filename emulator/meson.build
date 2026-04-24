@@ -11,6 +11,7 @@ emulator_src = files(
     'src/rv_pmp.c',
     'src/rv_decompress.c',
     'src/rv_machine.c',
+    'src/rv_paging.c',
     'src/rv_privileged.c',
 )
 

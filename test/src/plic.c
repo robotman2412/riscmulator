@@ -21,22 +21,22 @@ TESTCASE(plic_init_zero, {
     uint64_t val = 0xDEAD;
 
     // Priority for source 1 (offset 4).
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     // Pending word 0.
     val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     // Enable word 0 for context 0.
     val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     // Threshold for context 0.
     val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     rv_plic_destroy(&plic);
@@ -50,16 +50,16 @@ TESTCASE(plic_source_priority_rw, {
 
     // Source 1: offset 4.
     uint64_t val = 5;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 5);
 
     // Source 0 is reserved; writes are ignored and reads return 0.
     val = 7;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     rv_plic_destroy(&plic);
@@ -75,13 +75,13 @@ TESTCASE(plic_pending_set_read, {
 
     // Source 1 is bit 1 of pending word 0.
     uint64_t val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val & (1u << 1));
 
     // Source 0 is reserved; set_pending with 0 has no effect.
     rv_plic_set_pending(&plic, 0);
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(!(val & 1u));
 
     rv_plic_destroy(&plic);
@@ -95,9 +95,9 @@ TESTCASE(plic_enable_rw, {
 
     // Context 0 enable word 0 (offset 0x2000).
     uint64_t val = (1u << 1) | (1u << 3);
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == ((1u << 1) | (1u << 3)));
 
     rv_plic_destroy(&plic);
@@ -111,9 +111,9 @@ TESTCASE(plic_threshold_rw, {
 
     // Context 0 threshold at offset 0x200000.
     uint64_t val = 4;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 4);
 
     rv_plic_destroy(&plic);
@@ -126,7 +126,7 @@ TESTCASE(plic_claim_empty, {
     TEST_ASSERT(rv_machine_add_mmio(machine, rv_plic_mmio_region(&plic, PLIC_BASE)));
 
     uint64_t val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     rv_plic_destroy(&plic);
@@ -140,13 +140,13 @@ TESTCASE(plic_claim_basic, {
 
     // Priority[1] = 1, enable source 1 for context 0, threshold = 0 (default).
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     rv_plic_destroy(&plic);
@@ -159,17 +159,17 @@ TESTCASE(plic_claim_clears_pending, {
     TEST_ASSERT(rv_machine_add_mmio(machine, rv_plic_mmio_region(&plic, PLIC_BASE)));
 
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x1000, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(!(val & (1u << 1)));
 
     rv_plic_destroy(&plic);
@@ -182,24 +182,24 @@ TESTCASE(plic_complete, {
     TEST_ASSERT(rv_machine_add_mmio(machine, rv_plic_mmio_region(&plic, PLIC_BASE)));
 
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     // Claim.
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     // Complete.
     val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
 
     // Re-assert and claim again.
     rv_plic_set_pending(&plic, 1);
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     rv_plic_destroy(&plic);
@@ -213,15 +213,15 @@ TESTCASE(plic_priority_threshold, {
 
     // Priority 2, threshold 3: 2 > 3 is false, so claim should return 0.
     uint64_t val = 2;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 3;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     val = 0xDEAD;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 0);
 
     rv_plic_destroy(&plic);
@@ -235,22 +235,22 @@ TESTCASE(plic_highest_priority_wins, {
 
     // Source 1: priority 1.  Source 2: priority 5.
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 5;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 8, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 8, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = (1u << 1) | (1u << 2);
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
     rv_plic_set_pending(&plic, 2);
 
     // First claim: source 2 (priority 5).
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 2);
 
     // Second claim: source 1 (priority 1).
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     rv_plic_destroy(&plic);
@@ -265,9 +265,9 @@ TESTCASE(plic_mip_meip_set, {
     TEST_ASSERT(atomic_load(&cpu->irq_pending) == 0);
 
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
@@ -284,9 +284,9 @@ TESTCASE(plic_mip_seip_set, {
     // Priority[1] = 1, enable source 1 only in context 1 (S-mode, hart 0).
     // Context 1 enable region: 0x2000 + 1*0x80 = 0x2080.
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2080, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2080, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
 
     TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_SEIP_BIT));
@@ -302,14 +302,14 @@ TESTCASE(plic_mip_cleared_on_claim, {
     TEST_ASSERT(rv_machine_add_mmio(machine, rv_plic_mmio_region(&plic, PLIC_BASE)));
 
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     rv_plic_set_pending(&plic, 1);
     TEST_ASSERT(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT));
 
     val = 0;
-    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD));
+    TEST_ASSERT(rv_access_phys(machine, cpu, PLIC_BASE + 0x200004, &val, 2, RV_ACCESS_LOAD, false) == RV_MEM_OK);
     TEST_ASSERT(val == 1);
 
     TEST_ASSERT(!(atomic_load(&cpu->irq_pending) & (UINT64_C(1) << RV_PLIC_MEIP_BIT)));
@@ -334,16 +334,16 @@ TESTCASE_NOMACHINE(plic_multicore_contexts, {
 
     // Source 1 priority 1, source 2 priority 1.
     uint64_t val = 1;
-    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 4, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     val = 1;
-    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 8, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 8, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
 
     // Enable source 1 for context 0 (hart 0 M-mode: offset 0x2000).
     val = 1u << 1;
-    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 0x2000, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
     // Enable source 2 for context 2 (hart 1 M-mode: offset 0x2000 + 2*0x80 = 0x2100).
     val = 1u << 2;
-    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 0x2100, &val, 2, RV_ACCESS_STORE));
+    TEST_ASSERT(rv_access_phys(&machine, cpu0, PLIC_BASE + 0x2100, &val, 2, RV_ACCESS_STORE, false) == RV_MEM_OK);
 
     // Trigger source 1: only hart 0 should be notified.
     rv_plic_set_pending(&plic, 1);
