@@ -4,8 +4,8 @@
 
 #pragma once
 
+#include "cpu/rv_privileged.h"
 #include "rv_device.h"
-#include "rv_privileged.h"
 
 #include <stdbool.h>
 #include <stddef.h>

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "rv_machine.h"
-#include "rv_plic.h"
+#include "device/rv_plic.h"
 #include "testcase.h"
 
 #include <stdatomic.h>

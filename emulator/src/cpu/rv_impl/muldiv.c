@@ -2,12 +2,12 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_impl/muldiv.h"
+#include "cpu/rv_impl/muldiv.h"
 
-#include "rv_cpu.h"
-#include "rv_insn.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_insn.h"
+#include "cpu/rv_privileged.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
 
 #include <stdint.h>
 

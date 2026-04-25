@@ -2,15 +2,15 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
 
-#include "rv_decompress.h"
-#include "rv_impl/atomics.h"
-#include "rv_impl/base.h"
-#include "rv_impl/float.h"
-#include "rv_insn.h"
+#include "cpu/rv_decompress.h"
+#include "cpu/rv_impl/atomics.h"
+#include "cpu/rv_impl/base.h"
+#include "cpu/rv_impl/float.h"
+#include "cpu/rv_insn.h"
+#include "cpu/rv_privileged.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
 
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC

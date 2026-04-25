@@ -14,7 +14,7 @@ struct rv_cpu;
 // List of CSRs implemented by this emulator.
 enum rv_csr {
 #define RV_CSR_DEF(index, name) RV_CSR_##name = index,
-#include "rv_defs/csr.h"
+#include "cpu/rv_defs/csr.h"
 };
 
 // PMP configurations.

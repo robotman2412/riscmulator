@@ -2,14 +2,13 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_clint.h"
+#include "device/rv_clint.h"
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
 #include "rv_machine.h"
 
 #include <stdatomic.h>
 #include <stdlib.h>
-
 #include <time.h>
 
 // Tick frequency: 10 MHz → 100 ns per tick.

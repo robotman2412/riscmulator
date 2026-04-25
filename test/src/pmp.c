@@ -2,10 +2,10 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_cpu.h"
-#include "rv_csr.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
 #include "rv_machine.h"
-#include "rv_pmp.h"
+#include "cpu/rv_pmp.h"
 #include "testcase.h"
 
 // Helpers to read/write CSRs directly (machine mode).

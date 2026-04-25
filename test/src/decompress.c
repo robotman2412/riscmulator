@@ -2,7 +2,7 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_decompress.h"
+#include "cpu/rv_decompress.h"
 #include "testcase.h"
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"

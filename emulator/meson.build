@@ -1,18 +1,18 @@
 
 emulator_src = files(
-    'src/rv_impl/base.c',
-    'src/rv_impl/atomics.c',
-    'src/rv_impl/float.c',
-    'src/rv_impl/muldiv.c',
-    'src/rv_cpu.c',
-    'src/rv_csr.c',
-    'src/rv_clint.c',
-    'src/rv_plic.c',
-    'src/rv_pmp.c',
-    'src/rv_decompress.c',
+    'src/cpu/rv_impl/base.c',
+    'src/cpu/rv_impl/atomics.c',
+    'src/cpu/rv_impl/float.c',
+    'src/cpu/rv_impl/muldiv.c',
+    'src/cpu/rv_cpu.c',
+    'src/cpu/rv_csr.c',
+    'src/cpu/rv_pmp.c',
+    'src/cpu/rv_decompress.c',
+    'src/cpu/rv_paging.c',
+    'src/cpu/rv_privileged.c',
+    'src/device/rv_clint.c',
+    'src/device/rv_plic.c',
     'src/rv_machine.c',
-    'src/rv_paging.c',
-    'src/rv_privileged.c',
 )
 
 emulator_include = [

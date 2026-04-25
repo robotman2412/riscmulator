@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "rv_csr.h"
-#include "rv_insn.h"
+#include "cpu/rv_csr.h"
+#include "cpu/rv_insn.h"
 
 #include <stdint.h>
 

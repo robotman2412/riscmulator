@@ -2,10 +2,10 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_pmp.h"
+#include "cpu/rv_pmp.h"
 
-#include "rv_cpu.h"
-#include "rv_csr.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
 #include "rv_machine.h"
 
 #include <stddef.h>

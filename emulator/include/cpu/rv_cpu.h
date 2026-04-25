@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "rv_csr.h"
-#include "rv_paging.h"
-#include "rv_vector.h"
+#include "cpu/rv_csr.h"
+#include "cpu/rv_paging.h"
+#include "cpu/rv_vector.h"
 #include "softfloat.h"
 
 #include <inttypes.h>

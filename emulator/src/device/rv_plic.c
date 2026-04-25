@@ -1,9 +1,9 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_plic.h"
+#include "device/rv_plic.h"
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
 #include "rv_machine.h"
 
 #include <stdatomic.h>

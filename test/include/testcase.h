@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
 #include "rv_machine.h"
 
 #include <inttypes.h>

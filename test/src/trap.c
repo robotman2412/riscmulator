@@ -2,9 +2,9 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
+#include "cpu/rv_privileged.h"
 #include "testcase.h"
 
 static bool intercept_test_hook(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {

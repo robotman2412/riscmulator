@@ -2,10 +2,10 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_privileged.h"
+#include "cpu/rv_privileged.h"
 
-#include "rv_cpu.h"
-#include "rv_csr.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
 #include "rv_machine.h"
 
 #include <stdatomic.h>
@@ -42,9 +42,9 @@ void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap t
         cpu->csr.mstatus |= (uint64_t)cpu->privilege << RV_STATUS_SPP_BIT;
         cpu->privilege    = 1;
         rv_sync_mem_privilege(cpu);
-        uint64_t base     = cpu->csr.stvec & ~UINT64_C(3);
+        uint64_t base = cpu->csr.stvec & ~UINT64_C(3);
         // Vectored mode: interrupts jump to BASE + 4*cause; exceptions go to BASE.
-        cpu->pc           = (is_interrupt && (cpu->csr.stvec & 1)) ? base + 4 * cause_low : base;
+        cpu->pc       = (is_interrupt && (cpu->csr.stvec & 1)) ? base + 4 * cause_low : base;
     } else {
         // Execute handler in M-mode.
         cpu->csr.mepc     = trap.epc;
@@ -58,9 +58,9 @@ void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap t
         cpu->csr.mstatus |= (uint64_t)cpu->privilege << RV_STATUS_MPP_BASE_BIT;
         cpu->privilege    = 3;
         rv_sync_mem_privilege(cpu);
-        uint64_t base     = cpu->csr.mtvec & ~UINT64_C(3);
+        uint64_t base = cpu->csr.mtvec & ~UINT64_C(3);
         // Vectored mode: interrupts jump to BASE + 4*cause; exceptions go to BASE.
-        cpu->pc           = (is_interrupt && (cpu->csr.mtvec & 1)) ? base + 4 * cause_low : base;
+        cpu->pc       = (is_interrupt && (cpu->csr.mtvec & 1)) ? base + 4 * cause_low : base;
     }
 }
 

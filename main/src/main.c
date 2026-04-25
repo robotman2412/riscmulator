@@ -1,7 +1,7 @@
 
-#include "rv_cpu.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_privileged.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
 
 #include <stdio.h>
 #include <stdlib.h>

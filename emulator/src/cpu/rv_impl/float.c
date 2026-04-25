@@ -2,19 +2,19 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_impl/float.h"
+#include "cpu/rv_impl/float.h"
 
-#include "rv_cpu.h"
-#include "rv_csr.h"
-#include "rv_insn.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
+#include "cpu/rv_insn.h"
+#include "cpu/rv_privileged.h"
+#include "cpu/rv_softfloat.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
-#include "rv_softfloat.h"
+
 #include "softfloat.h"
 
-#include <stdint.h>
-
 #include <fenv.h>
+#include <stdint.h>
 #include <tgmath.h>
 
 // Float instruction funct5 values.

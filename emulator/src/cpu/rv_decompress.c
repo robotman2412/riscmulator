@@ -2,9 +2,9 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_decompress.h"
+#include "cpu/rv_decompress.h"
 
-#include "rv_insn.h"
+#include "cpu/rv_insn.h"
 
 // Full 7-bit opcode from the 5-bit major field (all 32-bit insns have bits[1:0]=11).
 #define OP(maj) (((maj) << 2) | 3)

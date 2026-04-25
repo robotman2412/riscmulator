@@ -2,20 +2,19 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_impl/base.h"
+#include "cpu/rv_impl/base.h"
 
-#include "rv_cpu.h"
-#include "rv_csr.h"
-#include "rv_impl/muldiv.h"
-#include "rv_insn.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
+#include "cpu/rv_impl/muldiv.h"
+#include "cpu/rv_insn.h"
+#include "cpu/rv_paging.h"
+#include "cpu/rv_privileged.h"
 #include "rv_machine.h"
-#include "rv_paging.h"
-#include "rv_privileged.h"
-
-#include <stdatomic.h>
-#include <stdlib.h>
 
 #include <sched.h>
+#include <stdatomic.h>
+#include <stdlib.h>
 
 // Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major
 // opcodes.

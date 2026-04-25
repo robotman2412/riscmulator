@@ -2,16 +2,15 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_impl/atomics.h"
+#include "cpu/rv_impl/atomics.h"
 
-#include "rv_cpu.h"
-#include "rv_insn.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_insn.h"
+#include "cpu/rv_privileged.h"
 #include "rv_machine.h"
-#include "rv_privileged.h"
-
-#include <stdint.h>
 
 #include <pthread.h>
+#include <stdint.h>
 
 // AMO funct5 values per the RISC-V A extension spec.
 #define AMO_FUNCT5(insn) (((insn) >> 27) & 0x1fu)

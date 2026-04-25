@@ -4,11 +4,11 @@
 
 #include "rv_machine.h"
 
-#include "rv_clint.h"
-#include "rv_cpu.h"
-#include "rv_csr.h"
-#include "rv_pmp.h"
-#include "rv_privileged.h"
+#include "cpu/rv_cpu.h"
+#include "cpu/rv_csr.h"
+#include "cpu/rv_pmp.h"
+#include "cpu/rv_privileged.h"
+#include "device/rv_clint.h"
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -45,8 +45,8 @@ bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_
     }
 
     for (size_t i = 0; i < cpu_count; i++) {
-        cpus[i].csr.mhartid  = i;
-        cpus[i].privilege    = 3; // CPUs reset into M-mode per RISC-V spec.
+        cpus[i].csr.mhartid = i;
+        cpus[i].privilege   = 3; // CPUs reset into M-mode per RISC-V spec.
         rv_sync_mem_privilege(&cpus[i]);
     }
 

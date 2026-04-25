@@ -1,8 +1,8 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_clint.h"
-#include "rv_csr.h"
+#include "device/rv_clint.h"
+#include "cpu/rv_csr.h"
 #include "rv_machine.h"
 #include "testcase.h"
 
