@@ -4,7 +4,7 @@
 
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_csr.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_pmp.h"
 #include "testcase.h"
 

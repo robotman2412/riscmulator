@@ -7,11 +7,11 @@
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_insn.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdint.h>
 
-void rv_muldiv_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_muldiv_op(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool    is_32  = RV_INSN_OP_MAJ(insn) & 0b00010;
     uint8_t funct3 = RV_INSN_FUNCT3(insn);
 

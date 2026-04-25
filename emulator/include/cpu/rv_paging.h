@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdint.h>
 
@@ -53,18 +53,18 @@ struct rv_tlb {
 // Look up a page-table entry without using the TLB.
 // Sets A/D flags according to `mode` if the PTE and PMP grant access.
 enum rv_mem_result rv_paging_raw_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 );
 
 // Do a cached lookup; try reading from the TLB first.
 // Sets A/D flags according to `mode` if the PTE and PMP grant access.
 enum rv_mem_result rv_paging_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 );
 
 // Access virtual memory.
 enum rv_mem_result rv_access_virt(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
 );
 
 // Clear the entire TLB.

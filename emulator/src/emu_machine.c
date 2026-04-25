@@ -2,7 +2,7 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_csr.h"
@@ -10,16 +10,15 @@
 #include "cpu/rv_privileged.h"
 #include "device/rv_clint.h"
 
+#include <assert.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-#include <assert.h>
 #include <string.h>
 
 struct cpu_thread_arg {
-    struct rv_machine *machine;
-    struct rv_cpu     *cpu;
+    struct emu_machine *machine;
+    struct rv_cpu      *cpu;
 };
 
 static void *cpu_thread(void *arg) {
@@ -32,7 +31,7 @@ static void *cpu_thread(void *arg) {
     return nullptr;
 }
 
-bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size) {
+bool emu_machine_init(struct emu_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size) {
     struct rv_cpu         *cpus = calloc(cpu_count, sizeof(struct rv_cpu));
     struct rv_reservation *resv = calloc(cpu_count, sizeof(struct rv_reservation));
     uint8_t               *ram  = calloc(1, ram_size);
@@ -60,7 +59,7 @@ bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_
     return true;
 }
 
-void rv_machine_run(struct rv_machine *machine) {
+void emu_machine_run(struct emu_machine *machine) {
     pthread_t             *threads = malloc(machine->cpu_count * sizeof(pthread_t));
     struct cpu_thread_arg *args    = malloc(machine->cpu_count * sizeof(struct cpu_thread_arg));
 
@@ -78,7 +77,7 @@ void rv_machine_run(struct rv_machine *machine) {
     free(args);
 }
 
-void rv_machine_destroy(struct rv_machine *machine) {
+void emu_machine_destroy(struct emu_machine *machine) {
     pthread_mutex_destroy(&machine->atomic_lock);
     free(machine->cpus);
     free(machine->reservations);
@@ -94,8 +93,8 @@ void rv_machine_destroy(struct rv_machine *machine) {
     machine->ram_end      = 0;
 }
 
-bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region) {
-    struct rv_mmio_region *arr = realloc(machine->mmio, (machine->mmio_count + 1) * sizeof(struct rv_mmio_region));
+bool emu_machine_add_mmio(struct emu_machine *machine, struct emu_mmio_region region) {
+    struct emu_mmio_region *arr = realloc(machine->mmio, (machine->mmio_count + 1) * sizeof(struct emu_mmio_region));
     if (!arr)
         return false;
     machine->mmio                        = arr;
@@ -106,13 +105,13 @@ bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region regio
 // Dispatch a single MMIO access to a known region.
 // data=nullptr is a no-op (permission-check pass); returns RV_MEM_OK.
 static enum rv_mem_result mmio_dispatch(
-    struct rv_machine     *machine,
-    struct rv_cpu         *cpu,
-    struct rv_mmio_region *r,
-    uint64_t               addr,
-    void                  *data,
-    uint8_t                size,
-    enum rv_access         mode
+    struct emu_machine     *machine,
+    struct rv_cpu          *cpu,
+    struct emu_mmio_region *r,
+    uint64_t                addr,
+    void                   *data,
+    uint8_t                 size,
+    enum rv_access          mode
 ) {
     (void)machine;
     (void)cpu;
@@ -136,7 +135,7 @@ static enum rv_mem_result mmio_dispatch(
 
 // Implementation of misaligned accesses.
 static enum rv_mem_result misaligned_access(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, uint64_t *data, size_t size, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t addr, uint64_t *data, size_t size, enum rv_access mode
 ) {
     // Loop (partial) accesses until done.
     while (size) {
@@ -158,7 +157,7 @@ static enum rv_mem_result misaligned_access(
 
         } else {
             // Not in RAM — try MMIO.
-            struct rv_mmio_region *r = nullptr;
+            struct emu_mmio_region *r = nullptr;
             for (size_t i = 0; i < machine->mmio_count; i++) {
                 if (addr >= machine->mmio[i].base && addr < machine->mmio[i].base + machine->mmio[i].size) {
                     r = &machine->mmio[i];
@@ -185,7 +184,7 @@ static enum rv_mem_result misaligned_access(
 }
 
 static inline enum rv_mem_result
-    do_pmp_check(struct rv_machine *machine, struct rv_cpu *cpu, uint64_t addr, size_t size, enum rv_access mode) {
+    do_pmp_check(struct emu_machine *machine, struct rv_cpu *cpu, uint64_t addr, size_t size, enum rv_access mode) {
     uint8_t perm = rv_pmp_check(machine, cpu, addr, size, cpu->privilege == 3);
 
     bool ok;
@@ -200,13 +199,13 @@ static inline enum rv_mem_result
 
 // Partial access to physical memory (e.g. spanning virtual page boundary).
 enum rv_mem_result rv_access_phys_partial(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    void              *data,
-    size_t             size,
-    enum rv_access     mode,
-    bool               ignore_pmp
+    struct emu_machine *machine,
+    struct rv_cpu      *cpu,
+    uint64_t            addr,
+    void               *data,
+    size_t              size,
+    enum rv_access      mode,
+    bool                ignore_pmp
 ) {
     if (!ignore_pmp) {
         enum rv_mem_result r = do_pmp_check(machine, cpu, addr, size, mode);
@@ -222,13 +221,13 @@ enum rv_mem_result rv_access_phys_partial(
 
 // Access physical memory, optimizing for aligned access.
 enum rv_mem_result rv_access_phys(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    void              *data,
-    uint8_t            size_exp,
-    enum rv_access     mode,
-    bool               ignore_pmp
+    struct emu_machine *machine,
+    struct rv_cpu      *cpu,
+    uint64_t            addr,
+    void               *data,
+    uint8_t             size_exp,
+    enum rv_access      mode,
+    bool                ignore_pmp
 ) {
     uint64_t size = UINT64_C(1) << size_exp;
 
@@ -270,7 +269,7 @@ enum rv_mem_result rv_access_phys(
 
     // Aligned MMIO dispatch.
     for (size_t i = 0; i < machine->mmio_count; i++) {
-        struct rv_mmio_region *r = &machine->mmio[i];
+        struct emu_mmio_region *r = &machine->mmio[i];
         if (addr >= r->base && addr + size <= r->base + r->size) {
             return mmio_dispatch(machine, cpu, r, addr, data, (uint8_t)size, mode);
         }

@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 struct rv_cpu;
-struct rv_machine;
+struct emu_machine;
 
 // High bit in mcause indicating an interrupt (vs. synchronous exception).
 #define RV_CAUSE_INTR_FLAG UINT64_C(0x8000000000000000)
@@ -67,9 +67,9 @@ struct rv_trap {
 };
 
 // Execute a certain trap handler.
-void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
+void rv_do_trap(struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
 // Execute the illegal instruction handler.
-void rv_do_iillegal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
+void rv_do_iillegal(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 // Check for pending interrupts and dispatch the highest-priority one.
 // Must be called after each instruction step.
-void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu);
+void rv_check_interrupts(struct emu_machine *machine, struct rv_cpu *cpu);

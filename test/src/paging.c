@@ -4,7 +4,7 @@
 
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_csr.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_paging.h"
 #include "cpu/rv_pmp.h"
 #include "testcase.h"
@@ -23,20 +23,20 @@
 
 // VM_TESTCASE: like TESTCASE but with a 64 KB machine at VM_RAM_BASE.
 #define VM_TESTCASE(name, ...)                                                                                         \
-    static bool _testbody_##name(struct rv_machine *machine, struct rv_cpu *cpu) {                                     \
+    static bool _testbody_##name(struct emu_machine *machine, struct rv_cpu *cpu) {                                     \
         {                                                                                                              \
             __VA_ARGS__                                                                                                \
         }                                                                                                              \
         return true;                                                                                                   \
     }                                                                                                                  \
     bool test_##name(void) {                                                                                           \
-        struct rv_machine _machine = {0};                                                                              \
-        if (!rv_machine_init(&_machine, 1, VM_RAM_BASE, VM_RAM_SIZE)) {                                                \
-            testcase_error_message("rv_machine_init failed");                                                          \
+        struct emu_machine _machine = {0};                                                                              \
+        if (!emu_machine_init(&_machine, 1, VM_RAM_BASE, VM_RAM_SIZE)) {                                                \
+            testcase_error_message("emu_machine_init failed");                                                          \
             return false;                                                                                              \
         }                                                                                                              \
         bool _result = _testbody_##name(&_machine, &_machine.cpus[0]);                                                 \
-        rv_machine_destroy(&_machine);                                                                                 \
+        emu_machine_destroy(&_machine);                                                                                 \
         return _result;                                                                                                \
     }                                                                                                                  \
     [[gnu::constructor]] void _register_##name() {                                                                     \
@@ -44,7 +44,7 @@
     }
 
 // Write a little-endian 64-bit value to physical RAM.
-static void pte_write(struct rv_machine *machine, uint64_t paddr, uint64_t val) {
+static void pte_write(struct emu_machine *machine, uint64_t paddr, uint64_t val) {
     uint8_t *p = machine->ram + (paddr - VM_RAM_BASE);
     p[0]       = (uint8_t)(val);
     p[1]       = (uint8_t)(val >> 8);
@@ -56,7 +56,7 @@ static void pte_write(struct rv_machine *machine, uint64_t paddr, uint64_t val) 
     p[7]       = (uint8_t)(val >> 56);
 }
 
-static uint64_t pte_read(struct rv_machine *machine, uint64_t paddr) {
+static uint64_t pte_read(struct emu_machine *machine, uint64_t paddr) {
     uint8_t *p = machine->ram + (paddr - VM_RAM_BASE);
     return (uint64_t)p[0] | (uint64_t)p[1] << 8 | (uint64_t)p[2] << 16 | (uint64_t)p[3] << 24 | (uint64_t)p[4] << 32 |
            (uint64_t)p[5] << 40 | (uint64_t)p[6] << 48 | (uint64_t)p[7] << 56;
@@ -72,7 +72,7 @@ static uint64_t pte_read(struct rv_machine *machine, uint64_t paddr) {
 //   VA 0x4000 → PA 0x80003000  R|W|G        (global, ASID test)
 //
 // PMP entry 0: locked NAPOT 64 KB at VM_RAM_BASE, RWX=7.
-static void vm_setup(struct rv_machine *machine, struct rv_cpu *cpu) {
+static void vm_setup(struct emu_machine *machine, struct rv_cpu *cpu) {
     // L2[0] → L1 at 0x80001000 (non-leaf, V only).
     pte_write(machine, 0x80000000, UINT64_C(0x0000000020000401));
     // L1[0] → L0 at 0x80002000 (non-leaf, V only).
@@ -94,7 +94,7 @@ static void vm_setup(struct rv_machine *machine, struct rv_cpu *cpu) {
 
 // Build Layout B page tables into physical pages 6-8.
 // VA 0x1000 is intentionally unmapped in Layout B.
-static void vm_setup_b(struct rv_machine *machine) {
+static void vm_setup_b(struct emu_machine *machine) {
     // L2B[0] → L1B at 0x80007000.
     pte_write(machine, 0x80006000, UINT64_C(0x0000000020001C01));
     // L1B[0] → L0B at 0x80008000.

@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_privileged.h"
 #include "testcase.h"
 
 #include <string.h>
 
 // Trap hook that halts the CPU on ECALL and records unexpected traps.
-static bool halt_on_ecall(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+static bool halt_on_ecall(void *cookie, struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)machine;
     bool *failed = cookie;
     cpu->halted  = true;
@@ -20,7 +20,7 @@ static bool halt_on_ecall(void *cookie, struct rv_machine *machine, struct rv_cp
     return false;
 }
 
-static void setup_hooks(struct rv_machine *machine, bool *failed) {
+static void setup_hooks(struct emu_machine *machine, bool *failed) {
     machine->hook_cookie = failed;
     for (int i = 0; i < 32; i++) {
         machine->trap_hook[i] = &halt_on_ecall;
@@ -36,19 +36,19 @@ TESTCASE_NOMACHINE(multicpu_single, {
         0x00000073, // ecall
     };
 
-    struct rv_machine machine = {0};
+    struct emu_machine machine = {0};
     bool              failed  = false;
-    TEST_ASSERT(rv_machine_init(&machine, 1, 0x10000, sizeof(code)));
+    TEST_ASSERT(emu_machine_init(&machine, 1, 0x10000, sizeof(code)));
     memcpy(machine.ram, code, sizeof(code));
     machine.cpus[0].privilege = 3;
     machine.cpus[0].pc        = 0x10000;
     setup_hooks(&machine, &failed);
 
-    rv_machine_run(&machine);
+    emu_machine_run(&machine);
 
     TEST_ASSERT(!failed);
     TEST_ASSERT((int64_t)machine.cpus[0].xregs[3] == 8);
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // Two-CPU independence test: CPU0 computes 10+20=30, CPU1 computes 100+200=300, both in x3.
@@ -67,9 +67,9 @@ TESTCASE_NOMACHINE(multicpu_two_cpus, {
     };
 
     size_t const      ram_size = 0x200;
-    struct rv_machine machine  = {0};
+    struct emu_machine machine  = {0};
     bool              failed   = false;
-    TEST_ASSERT(rv_machine_init(&machine, 2, 0x10000, ram_size));
+    TEST_ASSERT(emu_machine_init(&machine, 2, 0x10000, ram_size));
     memcpy(machine.ram, code0, sizeof(code0));
     memcpy(machine.ram + 0x100, code1, sizeof(code1));
     machine.cpus[0].privilege = 3;
@@ -78,12 +78,12 @@ TESTCASE_NOMACHINE(multicpu_two_cpus, {
     machine.cpus[1].pc        = 0x10100;
     setup_hooks(&machine, &failed);
 
-    rv_machine_run(&machine);
+    emu_machine_run(&machine);
 
     TEST_ASSERT(!failed);
     TEST_ASSERT((int64_t)machine.cpus[0].xregs[3] == 30);
     TEST_ASSERT((int64_t)machine.cpus[1].xregs[3] == 300);
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // Hart-ID test: both CPUs run csrrs x1,mhartid,x0; ecall.
@@ -94,9 +94,9 @@ TESTCASE_NOMACHINE(multicpu_hartid, {
         0x00000073, // ecall
     };
 
-    struct rv_machine machine = {0};
+    struct emu_machine machine = {0};
     bool              failed  = false;
-    TEST_ASSERT(rv_machine_init(&machine, 2, 0x10000, sizeof(code)));
+    TEST_ASSERT(emu_machine_init(&machine, 2, 0x10000, sizeof(code)));
     memcpy(machine.ram, code, sizeof(code));
     machine.cpus[0].privilege = 3;
     machine.cpus[0].pc        = 0x10000;
@@ -104,10 +104,10 @@ TESTCASE_NOMACHINE(multicpu_hartid, {
     machine.cpus[1].pc        = 0x10000;
     setup_hooks(&machine, &failed);
 
-    rv_machine_run(&machine);
+    emu_machine_run(&machine);
 
     TEST_ASSERT(!failed);
     TEST_ASSERT((int64_t)machine.cpus[0].xregs[1] == 0);
     TEST_ASSERT((int64_t)machine.cpus[1].xregs[1] == 1);
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })

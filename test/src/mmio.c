@@ -1,8 +1,9 @@
 // Copyright © 2026, __robotAtPLT
 // SPDX-License-Identifier: MIT
 
-#include "rv_device.h"
-#include "rv_machine.h"
+#include "emu_device.h"
+#include "emu_machine.h"
+
 #include "testcase.h"
 
 #include <string.h>
@@ -48,9 +49,9 @@ TESTCASE(mmio_aligned_read, {
     dev.mem[6]             = 0x34;
     dev.mem[7]             = 0x12;
 
-    TEST_ASSERT(rv_machine_add_mmio(
+    TEST_ASSERT(emu_machine_add_mmio(
         machine,
-        (struct rv_mmio_region){
+        (struct emu_mmio_region){
             .base   = MOCK_BASE,
             .size   = MOCK_SIZE,
             .device = &dev,
@@ -76,9 +77,9 @@ TESTCASE(mmio_aligned_read, {
 TESTCASE(mmio_aligned_write, {
     struct mock_device dev = {0};
 
-    TEST_ASSERT(rv_machine_add_mmio(
+    TEST_ASSERT(emu_machine_add_mmio(
         machine,
-        (struct rv_mmio_region){
+        (struct emu_mmio_region){
             .base   = MOCK_BASE,
             .size   = MOCK_SIZE,
             .device = &dev,
@@ -129,9 +130,9 @@ static bool fault_write(void *dev, uint64_t offset, uint8_t size, uint64_t value
 }
 
 TESTCASE(mmio_device_fault, {
-    TEST_ASSERT(rv_machine_add_mmio(
+    TEST_ASSERT(emu_machine_add_mmio(
         machine,
-        (struct rv_mmio_region){
+        (struct emu_mmio_region){
             .base   = MOCK_BASE,
             .size   = MOCK_SIZE,
             .device = nullptr,
@@ -153,9 +154,9 @@ TESTCASE(mmio_multiple_regions, {
     dev_a.mem[0]             = 0x11;
     dev_b.mem[0]             = 0x22;
 
-    TEST_ASSERT(rv_machine_add_mmio(
+    TEST_ASSERT(emu_machine_add_mmio(
         machine,
-        (struct rv_mmio_region){
+        (struct emu_mmio_region){
             .base   = MOCK_BASE,
             .size   = MOCK_SIZE,
             .device = &dev_a,
@@ -163,9 +164,9 @@ TESTCASE(mmio_multiple_regions, {
             .write  = mock_write,
         }
     ));
-    TEST_ASSERT(rv_machine_add_mmio(
+    TEST_ASSERT(emu_machine_add_mmio(
         machine,
-        (struct rv_mmio_region){
+        (struct emu_mmio_region){
             .base   = MOCK_BASE + 0x1000,
             .size   = MOCK_SIZE,
             .device = &dev_b,

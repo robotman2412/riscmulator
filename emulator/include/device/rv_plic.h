@@ -4,15 +4,14 @@
 
 #pragma once
 
-#include "rv_device.h"
+#include "emu_device.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <pthread.h>
-
-struct rv_machine;
+struct emu_machine;
 
 // Number of interrupt sources supported (source 0 is reserved and never pending).
 // Valid source identifiers are 1..RV_PLIC_NUM_SOURCES.
@@ -40,13 +39,13 @@ struct rv_plic {
     struct rv_plic_context *contexts;
     size_t                  num_contexts;
     // Back-reference for updating hart interrupt lines after state changes.
-    struct rv_machine      *machine;
+    struct emu_machine     *machine;
     pthread_mutex_t         lock;
 };
 
 // Initialise the PLIC; num_contexts is derived from machine->cpu_count.
 // The caller must zero-initialise *plic before this call.
-bool rv_plic_init(struct rv_plic *plic, struct rv_machine *machine);
+bool rv_plic_init(struct rv_plic *plic, struct emu_machine *machine);
 
 // Free resources allocated by rv_plic_init.  Does not free the struct itself.
 void rv_plic_destroy(struct rv_plic *plic);
@@ -55,6 +54,6 @@ void rv_plic_destroy(struct rv_plic *plic);
 // Thread-safe; may be called from any thread at any time.
 void rv_plic_set_pending(struct rv_plic *plic, uint32_t source);
 
-// Build an rv_mmio_region for registering this PLIC with rv_machine_add_mmio.
+// Build an emu_mmio_region for registering this PLIC with emu_machine_add_mmio.
 // The region starts at `base` and spans 0x400000 bytes (standard PLIC size).
-struct rv_mmio_region rv_plic_mmio_region(struct rv_plic *plic, uint64_t base);
+struct emu_mmio_region rv_plic_mmio_region(struct rv_plic *plic, uint64_t base);

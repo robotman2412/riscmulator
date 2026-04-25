@@ -10,7 +10,7 @@
 #include "cpu/rv_insn.h"
 #include "cpu/rv_paging.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <sched.h>
 #include <stdatomic.h>
@@ -18,7 +18,7 @@
 
 // Execute an instruction under the OP, OP-IMM, OP-32 or OP-IMM-32 major
 // opcodes.
-void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_op(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     if ((RV_INSN_OP_MAJ(insn) & 0b01000) && RV_INSN_FUNCT7(insn) == 0x01) {
         rv_muldiv_op(machine, cpu, insn);
         return;
@@ -86,7 +86,7 @@ void rv_base_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
 }
 
 // Execute an instruction under the LOAD or LOAD-FP major opcodes.
-void rv_base_load(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_load(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool     is_load_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
     uint8_t  funct3     = RV_INSN_FUNCT3(insn);
     uint64_t addr       = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_IMM12(insn);
@@ -143,7 +143,7 @@ void rv_base_load(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn)
 }
 
 // Execute an instruction under the STORE or STORE-FP major opcodes.
-void rv_base_store(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_store(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     bool     is_store_fp = RV_INSN_OP_MAJ(insn) & 0b00001;
     uint8_t  funct3      = RV_INSN_FUNCT3(insn);
     uint64_t addr        = rv_xreg_read(cpu, RV_INSN_RS1(insn)) + RV_INSN_S_IMM12(insn);
@@ -174,7 +174,7 @@ void rv_base_store(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
 }
 
 // Execute an instruction under the JAL major opcode.
-void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_jal(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // Unfortunately, this imm is harder to extract than usual.
@@ -191,7 +191,7 @@ void rv_base_jal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
 }
 
 // Execute an instruction under the JALR major opcode.
-void rv_base_jalr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_jalr(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // No need to check for IALIGN because this emulator has the C extension
@@ -203,7 +203,7 @@ void rv_base_jalr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn)
 }
 
 // Execute an instruction under the LUI or AUPIC major opcodes.
-void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_lui(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     uint64_t res = (int32_t)(insn & 0xfffff000);
@@ -215,7 +215,7 @@ void rv_base_lui(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) 
 }
 
 // Implementation of CSR operations.
-static void do_csr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+static void do_csr(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     uint32_t csr = RV_INSN_UIMM12(insn);
     uint64_t wdata;
     bool     do_write;
@@ -254,7 +254,7 @@ static void do_csr(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn
 }
 
 // Execute an instruction under the SYSTEM major opcode.
-void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_system(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     if (RV_INSN_FUNCT3(insn) != 0) {
         do_csr(machine, cpu, insn);
     } else if (insn == 0x30200073 && cpu->privilege == 3) {
@@ -346,7 +346,7 @@ void rv_base_system(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 }
 
 // Execute an instruction under the BRANCH major opcode.
-void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_branch(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
 
     // Like JAL, this IMM takes some more effort to extract.
@@ -378,7 +378,7 @@ void rv_base_branch(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 }
 
 // Execute an instruction under the MISC-MEM major opcode.
-void rv_base_miscmem(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_base_miscmem(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     (void)machine;
     (void)cpu;
 

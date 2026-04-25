@@ -12,7 +12,7 @@ emulator_src = files(
     'src/cpu/rv_privileged.c',
     'src/device/rv_clint.c',
     'src/device/rv_plic.c',
-    'src/rv_machine.c',
+    'src/emu_machine.c',
 )
 
 emulator_include = [

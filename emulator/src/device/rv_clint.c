@@ -5,7 +5,7 @@
 #include "device/rv_clint.h"
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -29,7 +29,7 @@ static inline uint64_t now_ns(void) {
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-bool rv_clint_init(struct rv_clint *clint, struct rv_machine *machine) {
+bool rv_clint_init(struct rv_clint *clint, struct emu_machine *machine) {
     size_t n = machine->cpu_count;
 
     uint64_t         *mtimecmp = calloc(n, sizeof(uint64_t));
@@ -179,8 +179,8 @@ static bool clint_write(void *dev, uint64_t offset, uint8_t size, uint64_t value
     return false;
 }
 
-struct rv_mmio_region rv_clint_mmio_region(struct rv_clint *clint, uint64_t base) {
-    return (struct rv_mmio_region){
+struct emu_mmio_region rv_clint_mmio_region(struct rv_clint *clint, uint64_t base) {
+    return (struct emu_mmio_region){
         .base   = base,
         .size   = RV_CLINT_SIZE,
         .device = clint,

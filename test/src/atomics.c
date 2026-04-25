@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_privileged.h"
 #include "testcase.h"
 
@@ -13,7 +13,7 @@ struct trap_capture {
     bool     fired;
 };
 
-static bool capture_trap(void *cookie, struct rv_machine *m, struct rv_cpu *cpu, struct rv_trap trap) {
+static bool capture_trap(void *cookie, struct emu_machine *m, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)m;
     (void)cpu;
     struct trap_capture *c = cookie;
@@ -23,7 +23,7 @@ static bool capture_trap(void *cookie, struct rv_machine *m, struct rv_cpu *cpu,
     return false;
 }
 
-static void setup_trap_hook(struct rv_machine *machine, struct trap_capture *cap) {
+static void setup_trap_hook(struct emu_machine *machine, struct trap_capture *cap) {
     cap->fired           = false;
     machine->hook_cookie = cap;
     for (int i = 0; i < 32; i++) {

@@ -1,12 +1,12 @@
 
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-static bool ecall_hook(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+static bool ecall_hook(void *cookie, struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)cookie;
     (void)machine;
     if (trap.cause == RV_CAUSE_ECALL_M && cpu->xregs[17] == 1) {
@@ -34,7 +34,7 @@ int main() {
         return 1;
     }
 
-    struct rv_machine machine = {0};
+    struct emu_machine machine = {0};
     struct rv_cpu     cpu     = {0};
 
     uint64_t const base_addr = 0x10000;

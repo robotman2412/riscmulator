@@ -9,7 +9,7 @@
 #include "cpu/rv_insn.h"
 #include "cpu/rv_privileged.h"
 #include "cpu/rv_softfloat.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include "softfloat.h"
 
@@ -515,7 +515,7 @@ static inline void rv_float_mvfx(struct rv_cpu *cpu, uint32_t insn, bool softflo
 }
 
 // Execute an instruction under the OP-FP major opcode.
-void rv_float_op_fp(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_float_op_fp(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     feclearexcept(FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW);
     rv_softfloat_clearflags();
 
@@ -699,7 +699,7 @@ void rv_float_op_fp(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t ins
 }
 
 // Execute an instruction under the MADD, MSUB, NMADD or NMSUB major opcodes.
-void rv_float_fmadd(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_float_fmadd(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     feclearexcept(FE_INVALID | FE_INEXACT | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW);
     rv_softfloat_clearflags();
 

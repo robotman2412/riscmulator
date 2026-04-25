@@ -6,7 +6,7 @@
 
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_csr.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdatomic.h>
 
@@ -14,7 +14,7 @@
 
 // Execute a certain trap handler.
 // trap.cause < 32 for synchronous exceptions; bit 63 set for interrupts.
-void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+void rv_do_trap(struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     bool     is_interrupt = (trap.cause >> 63) != 0;
     uint64_t cause_low    = trap.cause & 0x3f;
 
@@ -65,7 +65,7 @@ void rv_do_trap(struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap t
 }
 
 // Execute the illegal instruction handler.
-void rv_do_iillegal(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_do_iillegal(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     rv_do_trap(
         machine,
         cpu,
@@ -89,7 +89,7 @@ static int const irq_priority[] = {
 };
 
 // Check for pending, enabled interrupts and dispatch the highest-priority one.
-void rv_check_interrupts(struct rv_machine *machine, struct rv_cpu *cpu) {
+void rv_check_interrupts(struct emu_machine *machine, struct rv_cpu *cpu) {
     uint64_t pending = atomic_load_explicit(&cpu->irq_pending, memory_order_relaxed) & cpu->csr.mie;
     if (!pending)
         return;

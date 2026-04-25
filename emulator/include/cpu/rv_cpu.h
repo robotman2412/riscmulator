@@ -13,7 +13,7 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-struct rv_machine;
+struct emu_machine;
 
 // Log-base 2 of page size.
 #define RV_CPU_PAGE_SIZE_EXP 12
@@ -72,9 +72,9 @@ struct rv_cpu {
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
 // for jumps and branches.
-void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn);
+void rv_forcefeed_insn(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn);
 // Fetch and execute one instruction.
-void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu);
+void rv_step_insn(struct emu_machine *machine, struct rv_cpu *cpu);
 
 // Read from an integer register.
 [[gnu::always_inline]] static inline uint64_t rv_xreg_read(struct rv_cpu *cpu, uint32_t index) {

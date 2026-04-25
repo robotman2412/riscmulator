@@ -10,12 +10,12 @@
 #include "cpu/rv_impl/float.h"
 #include "cpu/rv_insn.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 // Execute one instruction word.
 // Unlike `rv_step_insn`, this does not fetch on its own and only changes the PC
 // for jumps and branches.
-void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_forcefeed_insn(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     switch (RV_INSN_OP_MAJ(insn)) {
         case RV_OP_MAJ_OP:
         case RV_OP_MAJ_OP_IMM:
@@ -43,7 +43,7 @@ void rv_forcefeed_insn(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t 
 }
 
 // Fetch and execute one instruction.
-void rv_step_insn(struct rv_machine *machine, struct rv_cpu *cpu) {
+void rv_step_insn(struct emu_machine *machine, struct rv_cpu *cpu) {
     uint16_t           hw;
     enum rv_mem_result r = rv_access_virt(machine, cpu, cpu->pc, &hw, 1, RV_ACCESS_INSN);
     if (r != RV_MEM_OK) {

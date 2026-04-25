@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_privileged.h"
 #include "testcase.h"
 
-static bool intercept_test_hook(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+static bool intercept_test_hook(void *cookie, struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)machine;
     (void)cpu;
     bool *caught       = cookie;

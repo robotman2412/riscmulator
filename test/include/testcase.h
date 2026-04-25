@@ -5,7 +5,7 @@
 #pragma once
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <inttypes.h>
 
@@ -18,20 +18,20 @@ void testcase_error_message(char const *fmt, ...);
 // TESTCASE: creates a machine (1 CPU, 0x1000 bytes RAM at 0x10000) before the
 // body and destroys it after.  The body may use 'machine' and 'cpu' directly.
 #define TESTCASE(name, ...)                                                                                            \
-    static bool _testbody_##name(struct rv_machine *machine, struct rv_cpu *cpu) {                                     \
+    static bool _testbody_##name(struct emu_machine *machine, struct rv_cpu *cpu) {                                     \
         {                                                                                                              \
             __VA_ARGS__                                                                                                \
         }                                                                                                              \
         return true;                                                                                                   \
     }                                                                                                                  \
     bool test_##name(void) {                                                                                           \
-        struct rv_machine _machine = {0};                                                                              \
-        if (!rv_machine_init(&_machine, 1, 0x10000, 0x1000)) {                                                         \
-            testcase_error_message("rv_machine_init failed");                                                          \
+        struct emu_machine _machine = {0};                                                                              \
+        if (!emu_machine_init(&_machine, 1, 0x10000, 0x1000)) {                                                         \
+            testcase_error_message("emu_machine_init failed");                                                          \
             return false;                                                                                              \
         }                                                                                                              \
         bool _result = _testbody_##name(&_machine, &_machine.cpus[0]);                                                 \
-        rv_machine_destroy(&_machine);                                                                                 \
+        emu_machine_destroy(&_machine);                                                                                 \
         return _result;                                                                                                \
     }                                                                                                                  \
     [[gnu::constructor]] void _register_##name() {                                                                     \

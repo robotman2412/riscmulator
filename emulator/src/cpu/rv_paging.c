@@ -8,7 +8,7 @@
 #include "cpu/rv_csr.h"
 #include "cpu/rv_pmp.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stddef.h>
 
@@ -63,7 +63,7 @@ static enum rv_mem_result check_access(struct rv_cpu *cpu, struct rv_tlb_entry e
 // Look up a page-table entry without using the TLB.
 // Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
 enum rv_mem_result rv_paging_raw_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 ) {
     enum rv_mem_result res;
     uint64_t           setfl = 1 << RV_PTE_A_BIT;
@@ -145,7 +145,7 @@ enum rv_mem_result rv_paging_raw_lookup(
 // Do a cached lookup; try reading from the TLB first.
 // Won't set the A/D bits if the PTE's permission bits wouldn't allow it.
 enum rv_mem_result rv_paging_lookup(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, struct rv_tlb_entry *out, enum rv_access mode
 ) {
     enum rv_mem_result res;
     size_t             row   = vaddr / RV_CPU_PAGE_SIZE % RV_TLB_ROWS;
@@ -212,7 +212,7 @@ enum rv_mem_result rv_paging_lookup(
 
 // Implementation of `rv_access_virt` for accesses spanning page boundaries.
 static inline enum rv_mem_result rv_access_virt_pageboundary(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
 ) {
     enum rv_mem_result  res;
     struct rv_tlb_entry result0;
@@ -257,7 +257,7 @@ static inline enum rv_mem_result rv_access_virt_pageboundary(
 
 // Access virtual memory.
 enum rv_mem_result rv_access_virt(
-    struct rv_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
+    struct emu_machine *machine, struct rv_cpu *cpu, uint64_t vaddr, void *data, uint8_t size_exp, enum rv_access mode
 ) {
     enum rv_mem_result res;
     uint8_t            eff_priv = (mode == RV_ACCESS_INSN) ? cpu->privilege : cpu->mem_privilege;

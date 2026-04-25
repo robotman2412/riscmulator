@@ -4,7 +4,7 @@
 #include "device/rv_plic.h"
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -186,7 +186,7 @@ static bool plic_write(void *dev, uint64_t offset, uint8_t size, uint64_t value)
     return true;
 }
 
-bool rv_plic_init(struct rv_plic *plic, struct rv_machine *machine) {
+bool rv_plic_init(struct rv_plic *plic, struct emu_machine *machine) {
     plic->machine      = machine;
     plic->num_contexts = machine->cpu_count * 2;
 
@@ -220,8 +220,8 @@ void rv_plic_set_pending(struct rv_plic *plic, uint32_t source) {
     pthread_mutex_unlock(&plic->lock);
 }
 
-struct rv_mmio_region rv_plic_mmio_region(struct rv_plic *plic, uint64_t base) {
-    return (struct rv_mmio_region){
+struct emu_mmio_region rv_plic_mmio_region(struct rv_plic *plic, uint64_t base) {
+    return (struct emu_mmio_region){
         .base   = base,
         .size   = PLIC_REGION_SIZE,
         .device = plic,

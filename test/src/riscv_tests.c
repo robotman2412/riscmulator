@@ -4,7 +4,7 @@
 
 #include "device/rv_clint.h"
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_privileged.h"
 #include "testcase.h"
 
@@ -18,7 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char const *set, char const *test);
+static bool do_riscv_test(struct emu_machine *machine, struct rv_cpu *cpu, char const *set, char const *test);
 
 #define RISCV_TEST2(set, set_str, test, test_str)                                                                      \
     TESTCASE(riscv_##set##_##test, return do_riscv_test(machine, cpu, set_str, test_str);)
@@ -266,7 +266,7 @@ struct riscv_test_state {
     uint64_t trap_count;
 };
 
-static void dump_vm_state(struct rv_machine *machine, struct rv_cpu *cpu) {
+static void dump_vm_state(struct emu_machine *machine, struct rv_cpu *cpu) {
     (void)machine;
     for (int i = 1; i < 32; i++) {
         printf("  x%-2d:      %" PRIx64 " (%" PRId64 ")\n", i, cpu->xregs[i], cpu->xregs[i]);
@@ -276,7 +276,7 @@ static void dump_vm_state(struct rv_machine *machine, struct rv_cpu *cpu) {
     printf("  fcsr:     %" PRIx64 "\n", cpu->csr.fcsr);
 }
 
-static bool trap_hook(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
+static bool trap_hook(void *cookie, struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap) {
     (void)machine;
     struct riscv_test_state *st = cookie;
 
@@ -305,7 +305,7 @@ vmfail:
     return false;
 }
 
-static bool do_riscv_test(struct rv_machine *machine, struct rv_cpu *cpu, char const *set, char const *test) {
+static bool do_riscv_test(struct emu_machine *machine, struct rv_cpu *cpu, char const *set, char const *test) {
     if (!compile_riscv_test(set, test)) {
         return false;
     }

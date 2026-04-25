@@ -5,15 +5,14 @@
 #pragma once
 
 #include "cpu/rv_privileged.h"
-#include "rv_device.h"
+#include "emu_device.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include <pthread.h>
-
-struct rv_machine;
+struct emu_machine;
 struct rv_cpu;
 struct rv_clint;
 
@@ -57,7 +56,7 @@ static inline enum rv_cause rv_mem_cause(enum rv_mem_result r, enum rv_access mo
 
 // Callback to run instead of the normal trap mechanism.
 // If this returns true, the normal trap mechanism activates.
-typedef bool (*rv_trap_fn_t)(void *cookie, struct rv_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
+typedef bool (*rv_trap_fn_t)(void *cookie, struct emu_machine *machine, struct rv_cpu *cpu, struct rv_trap trap);
 
 // Per-hart LR reservation entry; one per CPU indexed by mhartid.
 struct rv_reservation {
@@ -66,59 +65,59 @@ struct rv_reservation {
 };
 
 // A whole emulated machine.
-struct rv_machine {
+struct emu_machine {
     // RAM bounds; anything outside is either a hole or MMIO.
-    uint64_t               ram_start, ram_end;
+    uint64_t                ram_start, ram_end;
     // Virtual machine's RAM.
-    uint8_t               *ram;
+    uint8_t                *ram;
     // Table of trap interception functions.
-    rv_trap_fn_t           trap_hook[32];
+    rv_trap_fn_t            trap_hook[32];
     // Cookie sent to all hook functions.
-    void                  *hook_cookie;
-    // CPU array; owned by this machine when allocated via rv_machine_init.
-    struct rv_cpu         *cpus;
-    size_t                 cpu_count;
+    void                   *hook_cookie;
+    // CPU array; owned by this machine when allocated via emu_machine_init.
+    struct rv_cpu          *cpus;
+    size_t                  cpu_count;
     // Serialises all LR/SC/AMO operations across CPUs (Stage 4+).
-    pthread_mutex_t        atomic_lock;
+    pthread_mutex_t         atomic_lock;
     // One LR reservation per hart, indexed by mhartid; protected by
     // atomic_lock.
-    struct rv_reservation *reservations;
+    struct rv_reservation  *reservations;
     // MMIO regions; scanned on every non-RAM access.
-    struct rv_mmio_region *mmio;
-    size_t                 mmio_count;
-    // Optional CLINT device; NULL if not present. Set before rv_machine_run.
-    struct rv_clint       *clint;
+    struct emu_mmio_region *mmio;
+    size_t                  mmio_count;
+    // Optional CLINT device; NULL if not present. Set before emu_machine_run.
+    struct rv_clint        *clint;
 };
 
 // Initialise a machine: allocate cpu_count CPUs, RAM of ram_size bytes at
 // ram_start, and set up the atomic_lock and reservations array. Sets mhartid =
 // i for each CPU.
-bool rv_machine_init(struct rv_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size);
+bool emu_machine_init(struct emu_machine *machine, size_t cpu_count, uint64_t ram_start, size_t ram_size);
 // Run all CPUs concurrently (one pthread each) until every cpu->halted is set.
-void rv_machine_run(struct rv_machine *machine);
-// Free all resources allocated by rv_machine_init.
-void rv_machine_destroy(struct rv_machine *machine);
+void emu_machine_run(struct emu_machine *machine);
+// Free all resources allocated by emu_machine_init.
+void emu_machine_destroy(struct emu_machine *machine);
 // Append an MMIO region to the machine's dispatch table (copied by value).
 // Returns false on allocation failure.
-bool rv_machine_add_mmio(struct rv_machine *machine, struct rv_mmio_region region);
+bool emu_machine_add_mmio(struct emu_machine *machine, struct emu_mmio_region region);
 
 // Partial access to physical memory (e.g. spanning virtual page boundary).
 enum rv_mem_result rv_access_phys_partial(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    void              *data,
-    size_t             size,
-    enum rv_access     mode,
-    bool               ignore_pmp
+    struct emu_machine *machine,
+    struct rv_cpu      *cpu,
+    uint64_t            addr,
+    void               *data,
+    size_t              size,
+    enum rv_access      mode,
+    bool                ignore_pmp
 );
 // Access physical memory, optimizing for aligned access.
 enum rv_mem_result rv_access_phys(
-    struct rv_machine *machine,
-    struct rv_cpu     *cpu,
-    uint64_t           addr,
-    void              *data,
-    uint8_t            size_exp,
-    enum rv_access     mode,
-    bool               ignore_pmp
+    struct emu_machine *machine,
+    struct rv_cpu      *cpu,
+    uint64_t            addr,
+    void               *data,
+    uint8_t             size_exp,
+    enum rv_access      mode,
+    bool                ignore_pmp
 );

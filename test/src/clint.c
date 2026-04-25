@@ -3,7 +3,7 @@
 
 #include "device/rv_clint.h"
 #include "cpu/rv_csr.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "testcase.h"
 
 #include <stdatomic.h>
@@ -16,7 +16,7 @@
 TESTCASE(clint_mtime_advances, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     uint64_t t0 = 0, t1 = 0;
@@ -35,7 +35,7 @@ TESTCASE(clint_mtime_advances, {
 TESTCASE(clint_timer_not_fired_yet, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     // deadline ~100 s in the future (10^9 ticks × 100 ns = 100 s)
@@ -54,7 +54,7 @@ TESTCASE(clint_timer_not_fired_yet, {
 TESTCASE(clint_timer_past_fires, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     uint64_t zero = 0;
@@ -73,7 +73,7 @@ TESTCASE(clint_timer_past_fires, {
 TESTCASE(clint_timer_rearm, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     // Fire the timer.
@@ -101,12 +101,12 @@ TESTCASE(clint_timer_rearm, {
 // MSIP write to hart 0 sets/clears only that hart's MSIP bit; hart 1
 // unaffected.
 TESTCASE_NOMACHINE(clint_msip_hart0, {
-    struct rv_machine machine = {0};
-    TEST_ASSERT(rv_machine_init(&machine, 2, 0x10000, 0x1000));
+    struct emu_machine machine = {0};
+    TEST_ASSERT(emu_machine_init(&machine, 2, 0x10000, 0x1000));
 
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, &machine));
-    TEST_ASSERT(rv_machine_add_mmio(&machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(&machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine.clint = &clint;
 
     struct rv_cpu *cpu0 = &machine.cpus[0];
@@ -129,14 +129,14 @@ TESTCASE_NOMACHINE(clint_msip_hart0, {
     TEST_ASSERT(atomic_load(&cpu1->irq_pending) & (UINT64_C(1) << RV_CLINT_MSIP_BIT));
 
     rv_clint_destroy(&clint);
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // MSIP write via MMIO is visible in firmware's mip CSR read (bit 3).
 TESTCASE(clint_msip_visible_in_mip, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     // Assert MSIP.
@@ -160,7 +160,7 @@ TESTCASE(clint_msip_visible_in_mip, {
 TESTCASE(clint_mtip_visible_in_mip, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     // Write mtimecmp=0 (always past) and check.
@@ -178,8 +178,8 @@ TESTCASE(clint_mtip_visible_in_mip, {
 // mip write only touches SIP_WMASK bits; hardware-owned bits (MSIP=3, MTIP=7,
 // MEIP=11) are ignored.
 TESTCASE_NOMACHINE(mip_write_mask_hw_bits_ignored, {
-    struct rv_machine machine = {0};
-    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct emu_machine machine = {0};
+    TEST_ASSERT(emu_machine_init(&machine, 1, 0x80000000, 0x1000));
     struct rv_cpu *cpu = &machine.cpus[0];
 
     // Pre-set a known MSIP (bit 3) via irq_pending directly.
@@ -197,14 +197,14 @@ TESTCASE_NOMACHINE(mip_write_mask_hw_bits_ignored, {
     TEST_ASSERT(ip & (UINT64_C(1) << 5)); // STIP set
     TEST_ASSERT(ip & (UINT64_C(1) << 9)); // SEIP set
 
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // mip write clears SIP_WMASK bits when wdata=0; hardware bits in irq_pending
 // untouched.
 TESTCASE_NOMACHINE(mip_write_clears_sip_bits, {
-    struct rv_machine machine = {0};
-    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct emu_machine machine = {0};
+    TEST_ASSERT(emu_machine_init(&machine, 1, 0x80000000, 0x1000));
     struct rv_cpu *cpu = &machine.cpus[0];
 
     // Pre-set all bits (simulating hardware having set MSIP/MTIP/MEIP).
@@ -222,14 +222,14 @@ TESTCASE_NOMACHINE(mip_write_clears_sip_bits, {
     TEST_ASSERT(ip & (UINT64_C(1) << 7));  // MTIP still set
     TEST_ASSERT(ip & (UINT64_C(1) << 11)); // MEIP still set
 
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // sip write is masked by mideleg & SIP_WMASK; hardware-owned bits never
 // affected.
 TESTCASE_NOMACHINE(sip_write_mask, {
-    struct rv_machine machine = {0};
-    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct emu_machine machine = {0};
+    TEST_ASSERT(emu_machine_init(&machine, 1, 0x80000000, 0x1000));
     struct rv_cpu *cpu = &machine.cpus[0];
     cpu->privilege     = 1; // S-mode
     // Delegate all software-writable interrupt bits to S-mode.
@@ -247,14 +247,14 @@ TESTCASE_NOMACHINE(sip_write_mask, {
     TEST_ASSERT(ip & (UINT64_C(1) << 5));     // STIP set
     TEST_ASSERT(ip & (UINT64_C(1) << 9));     // SEIP set
 
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // sip read shows only delegated bits (mideleg masking); non-delegated bits
 // invisible.
 TESTCASE_NOMACHINE(sip_read_reflects_irq_pending, {
-    struct rv_machine machine = {0};
-    TEST_ASSERT(rv_machine_init(&machine, 1, 0x80000000, 0x1000));
+    struct emu_machine machine = {0};
+    TEST_ASSERT(emu_machine_init(&machine, 1, 0x80000000, 0x1000));
     struct rv_cpu *cpu = &machine.cpus[0];
     cpu->privilege     = 1; // S-mode
     // Delegate SSIP to S-mode; leave MSIP (bit 3) non-delegated.
@@ -268,7 +268,7 @@ TESTCASE_NOMACHINE(sip_read_reflects_irq_pending, {
     TEST_ASSERT(sip & (UINT64_C(1) << RV_MIP_SSIP_BIT));    // delegated: visible
     TEST_ASSERT(!(sip & (UINT64_C(1) << RV_MIP_MSIP_BIT))); // not delegated: hidden
 
-    rv_machine_destroy(&machine);
+    emu_machine_destroy(&machine);
 })
 
 // Writing mtime via MMIO adjusts the epoch so reads return approximately the
@@ -276,7 +276,7 @@ TESTCASE_NOMACHINE(sip_read_reflects_irq_pending, {
 TESTCASE(clint_mtime_write_adjusts, {
     struct rv_clint clint = {0};
     TEST_ASSERT(rv_clint_init(&clint, machine));
-    TEST_ASSERT(rv_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
+    TEST_ASSERT(emu_machine_add_mmio(machine, rv_clint_mmio_region(&clint, CLINT_BASE)));
     machine->clint = &clint;
 
     uint64_t target = 1000;

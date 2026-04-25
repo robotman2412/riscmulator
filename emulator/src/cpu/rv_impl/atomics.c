@@ -7,7 +7,7 @@
 #include "cpu/rv_cpu.h"
 #include "cpu/rv_insn.h"
 #include "cpu/rv_privileged.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -27,7 +27,7 @@
 #define AMO_MINU 0x18u
 #define AMO_MAXU 0x1Cu
 
-void rv_atomic_op(struct rv_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
+void rv_atomic_op(struct emu_machine *machine, struct rv_cpu *cpu, uint32_t insn) {
     uint8_t funct3 = RV_INSN_FUNCT3(insn);
     uint8_t funct5 = AMO_FUNCT5(insn);
     bool    is_32  = (funct3 == 2);

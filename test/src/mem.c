@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "cpu/rv_cpu.h"
-#include "rv_machine.h"
+#include "emu_machine.h"
 #include "cpu/rv_privileged.h"
 #include "testcase.h"
 
