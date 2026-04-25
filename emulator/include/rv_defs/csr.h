@@ -11,6 +11,15 @@ RV_CSR_DEF(0x001, fflags)
 RV_CSR_DEF(0x002, frm)
 RV_CSR_DEF(0x003, fcsr)
 
+/* ==== VECTOR STATUS ==== */
+RV_CSR_DEF(0x008, vstart)
+RV_CSR_DEF(0x009, vxsat)
+RV_CSR_DEF(0x00A, vxrm)
+RV_CSR_DEF(0x00F, vcsr)
+RV_CSR_DEF(0xC20, vl)
+RV_CSR_DEF(0xC21, vtype)
+RV_CSR_DEF(0xC22, vlenb)
+
 /* ==== COUNTERS ==== */
 RV_CSR_DEF(0xC00, cycle)
 RV_CSR_DEF(0xC01, time)

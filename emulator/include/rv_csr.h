@@ -52,6 +52,15 @@ struct rv_csr_state {
 
     // Floating-point status and rounding mode.
     uint64_t fcsr;
+
+    // Vector [operation] type.
+    uint64_t vtype;
+    // Vector [operation] length.
+    uint64_t vl;
+    // Vector start index (only legal value is zero).
+    uint64_t vstart;
+    // Vector saturation and rounding mode.
+    uint64_t vcsr;
 };
 
 // Extension state bits.

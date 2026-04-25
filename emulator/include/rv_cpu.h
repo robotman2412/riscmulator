@@ -6,6 +6,7 @@
 
 #include "rv_csr.h"
 #include "rv_paging.h"
+#include "rv_vector.h"
 #include "softfloat.h"
 
 #include <inttypes.h>
@@ -32,6 +33,8 @@ union rv_freg {
 
 // One RISC-V CPU core's configuration and state.
 struct rv_cpu {
+    // Vector registers.
+    union rv_vreg       vregs[32];
     // Translation lookaside buffer.
     struct rv_tlb       tlb;
     // Integer registers, the first is always zero and never written.
@@ -51,12 +54,12 @@ struct rv_cpu {
     uint8_t             mem_privilege;
     // Set to true to stop this CPU's execution thread.
     bool                halted;
+    // Armed when mtimecmp is written; guards the per-instruction clock_gettime call.
+    _Atomic bool        clint_timer_armed;
     // Single interrupt-pending register; bits match the mip/sip layout.
     // CLINT owns MSIP(3) and MTIP(7); PLIC owns MEIP(11) and SEIP(9).
     // Software writes via mip/sip CSR are masked to RV_SIP_WMASK.
     _Atomic uint64_t    irq_pending;
-    // Armed when mtimecmp is written; guards the per-instruction clock_gettime call.
-    _Atomic bool        clint_timer_armed;
 };
 
 // Recompute mem_privilege from mstatus.MPRV/MPP and cpu->privilege.
